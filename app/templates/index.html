@@ -1,0 +1,3642 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hyperlocal Places Map</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 1.5rem;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .header h1 {
+            font-size: 1.5rem;
+            font-weight: 600;
+            margin: 0;
+        }
+
+        .header-actions {
+            display: flex;
+            gap: 1rem;
+        }
+
+        .header-btn {
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            font-size: 0.9rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .header-btn:hover {
+            background: rgba(255, 255, 255, 0.3);
+            transform: translateY(-1px);
+        }
+
+        .map-container {
+            flex: 1;
+            position: relative;
+            width: 100%;
+        }
+
+        #map {
+            width: 100%;
+            height: 100%;
+        }
+
+        .search-container {
+            position: absolute;
+            top: 80px; /* Below Google Maps controls */
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 1000;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+            padding: 1rem;
+            width: 33.333vw; /* 1/3 of viewport width */
+            min-width: 300px;
+            max-width: 600px;
+        }
+
+        @media (max-width: 768px) {
+            .search-container {
+                top: auto;
+                bottom: 1rem; /* Position at bottom with margin */
+                left: 50%;
+                transform: translateX(-50%);
+                width: calc(100% - 2rem);
+                max-width: none;
+                margin: 0;
+                transition: bottom 0.3s ease;
+            }
+        }
+
+        /* Hide Google Maps autocomplete dropdown */
+        .pac-container {
+            display: none !important;
+            visibility: hidden !important;
+        }
+
+        /* Reduce padding/margin on top of info window heading to minimize height */
+        .gm-style-iw-d {
+            padding-top: 0.25rem !important;
+            margin-top: 0 !important;
+        }
+        
+        .gm-style-iw-d h3,
+        .gm-style-iw-d h4 {
+            margin-top: 0 !important;
+            padding-top: 0 !important;
+        }
+
+        .search-box {
+            display: flex;
+            gap: 0.5rem;
+            align-items: center;
+        }
+
+        .location-btn {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 0.75rem;
+            border-radius: 6px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+            min-width: 44px;
+            height: 44px;
+            align-self: flex-end;
+            margin-bottom: 0.25rem;
+        }
+
+        .location-btn:hover {
+            background: #5568d3;
+            transform: scale(1.05);
+        }
+
+        .location-btn:active {
+            transform: scale(0.95);
+        }
+
+        .location-btn svg {
+            width: 20px;
+            height: 20px;
+        }
+
+        #places-search {
+            flex: 1;
+            padding: 0.75rem;
+            border: 2px solid #e0e0e0;
+            border-radius: 6px;
+            font-size: 1rem;
+            outline: none;
+            transition: border-color 0.3s;
+        }
+
+        #places-search:focus {
+            border-color: #667eea;
+        }
+
+        .places-list {
+            margin-top: 1rem;
+            max-height: 400px;
+            overflow-y: auto;
+            position: relative;
+            z-index: 1001; /* Higher than Google Maps controls */
+            background: white;
+            border-radius: 6px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        @media (max-width: 768px) {
+            .places-list {
+                margin-top: 0;
+                margin-bottom: 1rem;
+                max-height: 300px;
+                display: flex;
+                flex-direction: column-reverse;
+            }
+        }
+
+        .place-item.highlighted {
+            background: #e3f2fd;
+            border-left: 3px solid #667eea;
+        }
+
+        .place-item {
+            padding: 0.75rem;
+            border-bottom: 1px solid #e0e0e0;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+
+        .place-item:hover {
+            background-color: #f5f5f5;
+        }
+
+        .place-item:last-child {
+            border-bottom: none;
+        }
+
+        .place-name {
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 0.25rem;
+        }
+
+        .place-address {
+            font-size: 0.875rem;
+            color: #666;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 1rem;
+            color: #666;
+        }
+
+        .error {
+            color: #e74c3c;
+            padding: 0.5rem;
+            font-size: 0.875rem;
+        }
+
+        .loading-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(255, 255, 255, 0.95);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 2000;
+        }
+
+        .loading-spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+            margin-bottom: 1rem;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .loading-text {
+            color: #666;
+            font-size: 1rem;
+        }
+
+        .side-panel {
+            position: fixed;
+            right: -400px;
+            top: 0;
+            width: 400px;
+            height: 100vh;
+            background: white;
+            box-shadow: -2px 0 10px rgba(0,0,0,0.2);
+            transition: right 0.3s ease;
+            z-index: 1500;
+            display: flex;
+            flex-direction: column;
+            overflow-y: auto;
+        }
+
+        .side-panel.open {
+            right: 0;
+        }
+
+        .side-panel-header {
+            padding: 1rem 1.5rem;
+            border-bottom: 1px solid #e0e0e0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .side-panel-header h2 {
+            font-size: 1.25rem;
+            font-weight: 600;
+            margin: 0;
+        }
+
+        .close-btn {
+            background: none;
+            border: none;
+            color: white;
+            font-size: 1.5rem;
+            cursor: pointer;
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            transition: background-color 0.2s;
+        }
+
+        .close-btn:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        .side-panel-content {
+            padding: 1.5rem;
+            flex: 1;
+        }
+
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 600;
+            color: #333;
+        }
+
+        .form-group input {
+            width: 100%;
+            padding: 0.75rem;
+            border: 2px solid #e0e0e0;
+            border-radius: 6px;
+            font-size: 1rem;
+            outline: none;
+            transition: border-color 0.3s;
+        }
+
+        .form-group input:focus {
+            border-color: #667eea;
+        }
+
+        .toggle-btn {
+            background: #f5f5f5;
+            border: 1px solid #e0e0e0;
+            border-radius: 4px;
+            width: 28px;
+            height: 28px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            font-size: 1.2rem;
+            color: #667eea;
+            transition: all 0.2s;
+        }
+
+        .toggle-btn:hover {
+            background: #e0e0e0;
+        }
+
+        .toggle-btn.expanded {
+            transform: rotate(45deg);
+        }
+
+        #selected-place-address-link:hover {
+            text-decoration: underline;
+        }
+
+        .btn {
+            padding: 0.75rem 1.5rem;
+            border: none;
+            border-radius: 6px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            width: 100%;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-primary:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .btn-secondary {
+            background: #f5f5f5;
+            color: #333;
+        }
+
+        .btn-secondary:hover {
+            background: #e0e0e0;
+        }
+
+        .btn-success {
+            background: #28a745;
+            color: white;
+        }
+
+        .btn-success:hover {
+            background: #218838;
+        }
+
+        .btn-success:disabled {
+            background: #28a745;
+            opacity: 0.7;
+            cursor: not-allowed;
+        }
+
+        .btn-outline {
+            background: transparent;
+            border: 2px solid #667eea;
+            color: #667eea;
+        }
+
+        .btn-outline:hover {
+            background: #667eea;
+            color: white;
+        }
+
+        .go-here-btn {
+            margin-top: 1rem;
+            padding: 0.75rem 1.5rem;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            width: 100%;
+            transition: all 0.2s;
+        }
+
+        .go-here-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+
+        .destinations-history {
+            margin-top: 2rem;
+        }
+
+        .destinations-history h3 {
+            font-size: 1.1rem;
+            margin-bottom: 1rem;
+            color: #333;
+        }
+
+        .destination-item {
+            padding: 1rem;
+            border: 1px solid #e0e0e0;
+            border-radius: 6px;
+            margin-bottom: 0.75rem;
+            background: #f9f9f9;
+        }
+
+        .day-separator {
+            display: flex;
+            align-items: center;
+            margin: 2rem 0 1rem 0;
+            gap: 1rem;
+        }
+
+        .day-separator:first-child {
+            margin-top: 0;
+        }
+
+        .day-separator-line {
+            flex: 1;
+            height: 1px;
+            background: #e0e0e0;
+        }
+
+        .day-separator-text {
+            font-weight: 600;
+            color: #667eea;
+            font-size: 0.9rem;
+            white-space: nowrap;
+        }
+
+        .destination-item-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: start;
+            margin-bottom: 0.5rem;
+        }
+
+        .destination-name {
+            font-weight: 600;
+            color: #333;
+        }
+
+        .destination-date-time {
+            font-size: 0.875rem;
+            color: #666;
+            margin-top: 0.25rem;
+        }
+
+        .destination-address {
+            font-size: 0.875rem;
+            color: #666;
+            margin-top: 0.5rem;
+        }
+
+        .delete-destination {
+            background: #e74c3c;
+            color: white;
+            border: none;
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+
+        .delete-destination:hover {
+            background: #c0392b;
+        }
+
+        .tabs {
+            display: flex;
+            border-bottom: 2px solid #e0e0e0;
+            margin-bottom: 1.5rem;
+        }
+
+        .tab {
+            flex: 1;
+            padding: 0.75rem;
+            text-align: center;
+            cursor: pointer;
+            border: none;
+            background: none;
+            font-size: 1rem;
+            color: #666;
+            transition: all 0.2s;
+        }
+
+        .tab.active {
+            color: #667eea;
+            border-bottom: 2px solid #667eea;
+            font-weight: 600;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        /* Destinations Panel */
+        .destinations-panel {
+            position: fixed;
+            right: -600px;
+            top: 0;
+            width: 600px;
+            height: 100vh;
+            background: white;
+            box-shadow: -2px 0 10px rgba(0,0,0,0.2);
+            transition: right 0.3s ease;
+            z-index: 1500;
+            display: flex;
+            flex-direction: column;
+            overflow-y: auto;
+        }
+
+        .destinations-panel.open {
+            right: 0;
+        }
+
+        @media (max-width: 768px) {
+            .destinations-panel {
+                width: 100%;
+                right: -100%;
+            }
+        }
+
+        .destinations-panel-header {
+            padding: 1.5rem;
+            border-bottom: 1px solid #e0e0e0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .destinations-panel-header h2 {
+            font-size: 1.25rem;
+            font-weight: 600;
+        }
+
+        .destinations-panel-content {
+            padding: 1.5rem;
+            flex: 1;
+        }
+
+        .destinations-view-controls {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 1.5rem;
+            border-bottom: 2px solid #e0e0e0;
+        }
+
+        .view-btn {
+            flex: 1;
+            padding: 0.75rem;
+            text-align: center;
+            cursor: pointer;
+            border: none;
+            background: none;
+            font-size: 1rem;
+            color: #666;
+            transition: all 0.2s;
+            border-bottom: 2px solid transparent;
+            margin-bottom: -2px;
+        }
+
+        .view-btn.active {
+            color: #667eea;
+            border-bottom: 2px solid #667eea;
+            font-weight: 600;
+        }
+
+        .destinations-view {
+            display: none;
+        }
+
+        .destinations-view.active {
+            display: block;
+        }
+
+        .destination-status {
+            display: inline-block;
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            margin-left: 0.5rem;
+        }
+
+        .status-active {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .status-past {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .status-cancelled {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        .cancel-btn {
+            background: #e74c3c;
+            color: white;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 4px;
+            font-size: 0.875rem;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+
+        .cancel-btn:hover {
+            background: #c0392b;
+        }
+
+        .cancel-btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+
+        /* Calendar Styles */
+        .calendar-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.5rem;
+        }
+
+        .calendar-header h3 {
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: #333;
+        }
+
+        .calendar-nav-btn {
+            background: #f5f5f5;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            font-size: 1.25rem;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+
+        .calendar-nav-btn:hover {
+            background: #e0e0e0;
+        }
+
+        .calendar-grid {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            gap: 0.5rem;
+        }
+
+        .calendar-day-header {
+            text-align: center;
+            font-weight: 600;
+            color: #666;
+            padding: 0.5rem;
+            font-size: 0.875rem;
+        }
+
+        .calendar-day {
+            aspect-ratio: 1;
+            border: 1px solid #e0e0e0;
+            border-radius: 6px;
+            padding: 0.5rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            position: relative;
+        }
+
+        .calendar-day:hover {
+            background: #f5f5f5;
+        }
+
+        .calendar-day.other-month {
+            opacity: 0.3;
+        }
+
+        .calendar-day.today {
+            background: #e3f2fd;
+            border-color: #667eea;
+            font-weight: 700;
+        }
+
+        .calendar-day.past {
+            opacity: 0.4;
+            color: #999;
+            background: #f5f5f5;
+        }
+
+        .calendar-day.has-event {
+            background: #fff3cd;
+            border-color: #f39c12;
+        }
+
+        .calendar-day.today.has-event {
+            background: linear-gradient(135deg, #e3f2fd 0%, #fff3cd 100%);
+        }
+
+        .calendar-day-number {
+            font-weight: 600;
+            margin-bottom: 0.25rem;
+        }
+
+        .calendar-day-events {
+            font-size: 0.75rem;
+            color: #666;
+        }
+
+        .calendar-day.clickable {
+            cursor: pointer;
+        }
+
+        .day-view {
+            margin-top: 2rem;
+            padding-top: 2rem;
+            padding-bottom: 8rem;
+            border-top: 2px solid #e0e0e0;
+        }
+
+        .day-view-back-link {
+            margin-top: 2rem;
+            text-align: center;
+        }
+
+        .day-view-back-link a {
+            color: #667eea;
+            text-decoration: none;
+            font-size: 0.9rem;
+            padding: 0.5rem 1rem;
+            display: inline-block;
+            border: 1px solid #667eea;
+            border-radius: 6px;
+            transition: all 0.2s;
+        }
+
+        .day-view-back-link a:hover {
+            background: #667eea;
+            color: white;
+        }
+
+        @media (max-width: 768px) {
+            .calendar-grid {
+                gap: 0.25rem;
+                width: 100%;
+                box-sizing: border-box;
+                padding: 0 0.5rem;
+            }
+
+            .calendar-day {
+                padding: 0.25rem;
+                font-size: 0.7rem;
+                min-width: 0;
+            }
+
+            .calendar-day-header {
+                padding: 0.25rem;
+                font-size: 0.7rem;
+            }
+
+            .day-view {
+                margin-top: 1rem;
+                padding-top: 1rem;
+                padding-bottom: 2rem;
+            }
+
+            #destinations-calendar-view {
+                overflow-x: hidden;
+            }
+        }
+
+        .day-view-header {
+            font-size: 1.1rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+            color: #333;
+        }
+
+        .day-view-events {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+
+        .day-view-event {
+            padding: 1rem;
+            border: 1px solid #e0e0e0;
+            border-radius: 6px;
+            background: #f9f9f9;
+        }
+
+        .day-view-event.cancelled {
+            opacity: 0.6;
+        }
+
+        .day-view-event {
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .day-view-event:hover {
+            background: #f0f0f0;
+            transform: translateY(-2px);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        /* Event View Side Panel */
+        #event-view-panel {
+            z-index: 1600; /* Higher than destinations panel */
+            width: 600px; /* Same width as destinations panel */
+            right: -600px; /* Same initial position */
+        }
+
+        #event-view-panel.open {
+            right: 0;
+        }
+
+        @media (max-width: 768px) {
+            #event-view-panel {
+                width: 100%;
+                right: -100%;
+            }
+        }
+        
+        /* User Profile View Side Panel */
+        #user-profile-panel {
+            z-index: 1700; /* Higher than event view panel */
+            width: 600px; /* Same width as other panels */
+            right: -600px; /* Same initial position */
+        }
+
+        #user-profile-panel.open {
+            right: 0;
+        }
+
+        @media (max-width: 768px) {
+            #user-profile-panel {
+                width: 100%;
+                right: -100%;
+            }
+        }
+
+        .event-view-header {
+            font-size: 1.5rem;
+            font-weight: 600;
+            margin-bottom: 1.5rem;
+            color: #333;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .event-view-header .rating {
+            color: #f39c12;
+            font-size: 1.2rem;
+            margin-left: 0.5rem;
+        }
+
+        .event-view-type {
+            font-size: 1rem;
+            color: #666;
+            margin-top: 0.5rem;
+            font-weight: normal;
+        }
+
+        .event-url-field {
+            display: flex;
+            gap: 0.5rem;
+            margin: 1.5rem 0;
+            align-items: center;
+        }
+
+        .event-url-field input {
+            flex: 1;
+            padding: 0.75rem;
+            border: 1px solid #e0e0e0;
+            border-radius: 6px;
+            font-size: 0.875rem;
+            background: #f9f9f9;
+        }
+
+        .copy-btn {
+            padding: 0.75rem 1rem;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.875rem;
+            transition: background 0.2s;
+        }
+
+        .copy-btn:hover {
+            background: #5568d3;
+        }
+
+        .invite-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 2000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .invite-overlay.open {
+            display: flex;
+        }
+
+        .invite-overlay-content {
+            background: white;
+            border-radius: 8px;
+            padding: 2rem;
+            max-width: 500px;
+            width: 90%;
+            max-height: 80vh;
+            overflow-y: auto;
+            position: relative;
+        }
+
+        .invite-overlay-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.5rem;
+        }
+
+        .invite-overlay-header h3 {
+            margin: 0;
+            font-size: 1.5rem;
+        }
+
+        .invite-overlay-close {
+            background: none;
+            border: none;
+            font-size: 1.5rem;
+            cursor: pointer;
+            color: #666;
+            padding: 0.25rem 0.5rem;
+        }
+
+        .email-input-container {
+            margin-bottom: 1rem;
+        }
+
+        .email-input-container input {
+            width: 100%;
+            padding: 0.75rem;
+            border: 2px solid #e0e0e0;
+            border-radius: 6px;
+            font-size: 1rem;
+            box-sizing: border-box;
+        }
+
+        .email-input-container input:focus {
+            border-color: #667eea;
+            outline: none;
+        }
+
+        .email-input-container input.invalid {
+            border-color: #e74c3c;
+        }
+
+        .emails-list {
+            margin: 1rem 0;
+            min-height: 50px;
+        }
+
+        .email-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.5rem;
+            background: #f9f9f9;
+            border-radius: 4px;
+            margin-bottom: 0.5rem;
+        }
+
+        .email-row span {
+            flex: 1;
+            font-size: 0.875rem;
+        }
+
+        .email-row button {
+            background: none;
+            border: none;
+            color: #e74c3c;
+            cursor: pointer;
+            font-size: 1.2rem;
+            padding: 0 0.5rem;
+        }
+
+        .invite-message-textarea {
+            width: 100%;
+            padding: 0.75rem;
+            border: 2px solid #e0e0e0;
+            border-radius: 6px;
+            font-size: 0.95rem;
+            line-height: 1.5;
+            font-family: inherit;
+            resize: vertical;
+            box-sizing: border-box;
+        }
+
+        .invite-message-textarea:focus {
+            border-color: #667eea;
+            outline: none;
+        }
+
+        .invite-overlay-actions {
+            display: flex;
+            gap: 1rem;
+            justify-content: flex-end;
+            margin-top: 1.5rem;
+        }
+
+        @media (max-width: 768px) {
+            .invite-overlay-content {
+                width: 95%;
+                padding: 1.5rem;
+            }
+        }
+
+        .event-view-details {
+            margin-bottom: 1.5rem;
+        }
+
+        .event-view-detail-item {
+            margin-bottom: 0.75rem;
+            font-size: 0.9rem;
+        }
+
+        .event-view-detail-label {
+            font-weight: 600;
+            color: #666;
+            margin-bottom: 0.25rem;
+        }
+
+        .event-view-actions {
+            margin-top: 2rem;
+            padding-top: 1.5rem;
+            border-top: 1px solid #e0e0e0;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .event-view-actions .btn-primary {
+            background: #dc3545;
+            border-color: #dc3545;
+        }
+
+        .event-view-actions .btn-primary:hover {
+            background: #c82333;
+            border-color: #c82333;
+        }
+
+        .delete-link {
+            color: #dc3545;
+            cursor: pointer;
+            text-decoration: none;
+            font-size: 0.9rem;
+            padding: 0.5rem 0;
+            transition: color 0.2s;
+            text-align: center;
+        }
+
+        .delete-link:hover {
+            color: #c82333;
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Hyperlocal Places Map</h1>
+        <div class="header-actions">
+            <div id="auth-section" style="display: none;">
+                <span id="user-name" style="margin-right: 1rem; font-size: 0.9rem;"></span>
+                <button class="header-btn" onclick="openDestinationsPanel()">My Destinations</button>
+                <button class="header-btn" onclick="logout()">Logout</button>
+            </div>
+            <div id="login-section">
+                <button class="header-btn" onclick="login()">Sign in with Google</button>
+            </div>
+        </div>
+    </div>
+    
+    <div class="map-container">
+        <div id="loading-overlay" class="loading-overlay">
+            <div class="loading-spinner"></div>
+            <div class="loading-text">Getting your location...</div>
+        </div>
+        <div id="map"></div>
+        <div class="search-container" id="search-container" style="display: none;">
+            <div class="search-box">
+                <div style="flex: 1; display: flex; flex-direction: column; gap: 0.25rem;">
+                    <div style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.75rem; color: #666;">
+                        <span id="current-date"></span>
+                        <span>•</span>
+                        <span id="current-weather"></span>
+                    </div>
+                <input 
+                    type="text" 
+                    id="places-search" 
+                        placeholder="Where are we going?"
+                    autocomplete="off"
+                />
+                </div>
+                <button class="location-btn" onclick="centerOnUserLocation()" title="Center on my location">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"/>
+                        <circle cx="12" cy="12" r="6"/>
+                        <circle cx="12" cy="12" r="2"/>
+                    </svg>
+                </button>
+            </div>
+            <div id="places-list" class="places-list"></div>
+        </div>
+        
+        <!-- Side Panel -->
+        <div id="side-panel" class="side-panel">
+            <div class="side-panel-header">
+                <h2 id="panel-title">Create a new event</h2>
+                <button class="close-btn" onclick="closeSidePanel()">&times;</button>
+            </div>
+            <div class="side-panel-content">
+                <div id="selected-place-info" style="margin-bottom: 1.5rem; padding: 1rem; background: #f9f9f9; border-radius: 6px;">
+                    <h3 id="selected-place-name" style="font-size: 1.25rem; font-weight: 600; margin-bottom: 0.5rem; color: #333;"></h3>
+                    <div style="margin-bottom: 0.5rem;">
+                        <a id="selected-place-address-link" href="#" target="_blank" style="font-size: 0.875rem; color: #667eea; text-decoration: none; word-break: break-word;">
+                            <span id="selected-place-address"></span>
+                        </a>
+                    </div>
+                    <div id="selected-place-hours" style="font-size: 0.875rem; color: #666;"></div>
+                </div>
+                
+                <form id="destination-form">
+                    <div class="form-group">
+                        <label for="destination-date">When are you going?</label>
+                        <input type="date" id="destination-date" required>
+                    </div>
+                    <div class="form-group">
+                        <div style="display: flex; align-items: center; margin-bottom: 0.5rem;">
+                            <label style="margin: 0; margin-right: 0.5rem;">Add time</label>
+                            <button type="button" id="toggle-time-btn" class="toggle-btn" onclick="toggleTimeSection()">+</button>
+                        </div>
+                        <div id="time-section" style="display: none;">
+                            <input type="time" id="destination-time">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <div style="display: flex; align-items: center; margin-bottom: 0.5rem;">
+                            <label style="margin: 0; margin-right: 0.5rem;">Invite people</label>
+                            <button type="button" id="toggle-invite-btn" class="toggle-btn" onclick="toggleInviteSection()">+</button>
+                        </div>
+                        <div id="invite-section" style="display: none;">
+                            <button type="button" class="btn btn-primary" onclick="openInviteOverlayForNewEvent()" style="background: #667eea; width: 100%; margin-bottom: 0.5rem;">Invite via email</button>
+                        </div>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Create event</button>
+                </form>
+            </div>
+        </div>
+        
+        <!-- Destinations Panel -->
+        <div id="destinations-panel" class="destinations-panel">
+            <div class="destinations-panel-header">
+                <h2>My Destinations</h2>
+                <button class="close-btn" onclick="closeDestinationsPanel()">&times;</button>
+            </div>
+            <div class="destinations-panel-content">
+                <div class="destinations-view-controls">
+                    <button class="view-btn active" onclick="switchDestinationsView('list')">List</button>
+                    <button class="view-btn" onclick="switchDestinationsView('calendar')">Calendar</button>
+                </div>
+                
+                <!-- List View -->
+                <div id="destinations-list-view" class="destinations-view active">
+                    <div id="destinations-list-container">
+                        <div class="loading">Loading destinations...</div>
+                    </div>
+                </div>
+                
+                <!-- Calendar View -->
+                <div id="destinations-calendar-view" class="destinations-view">
+                    <div class="calendar-header">
+                        <button class="calendar-nav-btn" onclick="navigateCalendar(-1)">&larr;</button>
+                        <h3 id="calendar-month-year"></h3>
+                        <button class="calendar-nav-btn" onclick="navigateCalendar(1)">&rarr;</button>
+                    </div>
+                    <div id="calendar-grid" class="calendar-grid"></div>
+                    <div id="day-view" class="day-view" style="display: none;">
+                        <div class="day-view-header" id="day-view-header"></div>
+                        <div id="day-view-events" class="day-view-events"></div>
+                        <div class="day-view-back-link">
+                            <a href="#" onclick="scrollToTop(); return false;">↑ Back to top</a>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- Event View Side Panel -->
+        <div id="event-view-panel" class="side-panel">
+            <div class="side-panel-header">
+                <button class="back-btn" onclick="closeEventView()" style="background: none; border: none; color: white; font-size: 1.5rem; cursor: pointer; padding: 0.25rem 0.5rem; margin-right: 0.5rem;">&larr;</button>
+                <h2 id="event-view-panel-title">Event Details</h2>
+            </div>
+            <div class="side-panel-content">
+                <div id="event-view-header" class="event-view-header"></div>
+                <div id="event-view-details" class="event-view-details"></div>
+                <div id="event-view-actions" class="event-view-actions"></div>
+            </div>
+        </div>
+        
+        <!-- User Profile View Side Panel -->
+        <div id="user-profile-panel" class="side-panel">
+            <div class="side-panel-header">
+                <button class="back-btn" onclick="closeUserProfile()" style="background: none; border: none; color: white; font-size: 1.5rem; cursor: pointer; padding: 0.25rem 0.5rem; margin-right: 0.5rem;">&larr;</button>
+                <h2 id="user-profile-panel-title">User Profile</h2>
+            </div>
+            <div class="side-panel-content">
+                <div id="user-profile-content"></div>
+            </div>
+        </div>
+        
+        <!-- Invite Overlay -->
+        <div id="invite-overlay" class="invite-overlay">
+            <div class="invite-overlay-content">
+                <div class="invite-overlay-header">
+                    <h3>Invite People</h3>
+                    <button class="invite-overlay-close" onclick="closeInviteOverlay()">&times;</button>
+                </div>
+                <div class="email-input-container">
+                    <label for="invite-message-text" style="display: block; margin-bottom: 0.5rem; font-weight: 600; font-size: 0.9rem;">Invite Message</label>
+                    <textarea 
+                        id="invite-message-text" 
+                        class="invite-message-textarea"
+                        rows="4"
+                        placeholder="Enter your invite message..."
+                    ></textarea>
+                </div>
+                <div class="email-input-container" style="margin-top: 1rem;">
+                    <input 
+                        type="email" 
+                        id="invite-email-input" 
+                        placeholder="Enter email address"
+                        onkeypress="handleEmailInputKeypress(event)"
+                    />
+                </div>
+                <div id="invite-emails-list" class="emails-list"></div>
+                <div class="invite-overlay-actions">
+                    <button class="btn btn-primary" onclick="sendInvites()">Send</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let map;
+        let service;
+        let infowindow;
+        let markers = [];
+        let recommendationMarkers = [];
+        let userLocation = null;
+        let currentUser = null;
+        let currentWeather = null;
+
+        // Authentication functions
+        async function checkAuthStatus() {
+            try {
+                const response = await fetch('/api/auth/status');
+                const data = await response.json();
+                if (data.authenticated) {
+                    currentUser = data;
+                    document.getElementById('auth-section').style.display = 'flex';
+                    document.getElementById('login-section').style.display = 'none';
+                    document.getElementById('user-name').textContent = data.name || data.email;
+                } else {
+                    currentUser = null;
+                    document.getElementById('auth-section').style.display = 'none';
+                    document.getElementById('login-section').style.display = 'block';
+                }
+            } catch (error) {
+                console.error('Error checking auth status:', error);
+            }
+        }
+
+        function login() {
+            window.location.href = '/auth/google?redirect=' + encodeURIComponent(window.location.href);
+        }
+
+        function logout() {
+            window.location.href = '/auth/logout';
+        }
+
+        function requireAuth(callback) {
+            if (!currentUser) {
+                if (confirm('You need to sign in to perform this action. Sign in now?')) {
+                    login();
+                }
+                return false;
+            }
+            return callback();
+        }
+
+        // Check for event ID in URL and redirect if needed
+        function checkEventUrl() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const eventId = urlParams.get('event');
+            if (eventId) {
+                window.location.href = `/event/${eventId}`;
+            }
+        }
+
+        // Initialize the map - but wait for user location first
+        function initMap() {
+            // Check authentication and event URL first
+            checkAuthStatus();
+            checkEventUrl();
+            // First, get user's location
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                    (position) => {
+                        userLocation = {
+                            lat: position.coords.latitude,
+                            lng: position.coords.longitude
+                        };
+                        // Cache user location in localStorage
+                        localStorage.setItem('userLocation', JSON.stringify(userLocation));
+                        initializeMapWithLocation(userLocation);
+                    },
+                    (error) => {
+                        console.error('Geolocation error:', error);
+                        // Fallback to default location if geolocation fails
+                        const defaultLocation = { lat: 40.7128, lng: -74.0060 }; // New York City
+                        document.getElementById('loading-overlay').querySelector('.loading-text').textContent = 
+                            'Location access denied. Using default location.';
+                        setTimeout(() => {
+                            initializeMapWithLocation(defaultLocation);
+                        }, 1000);
+                    },
+                    {
+                        enableHighAccuracy: true,
+                        timeout: 10000,
+                        maximumAge: 0
+                    }
+                );
+            } else {
+                // Browser doesn't support geolocation
+                const defaultLocation = { lat: 40.7128, lng: -74.0060 };
+                document.getElementById('loading-overlay').querySelector('.loading-text').textContent = 
+                    'Geolocation not supported. Using default location.';
+                setTimeout(() => {
+                    initializeMapWithLocation(defaultLocation);
+                }, 1000);
+            }
+        }
+
+        function initializeMapWithLocation(location) {
+            // Initialize the map centered on user location
+            map = new google.maps.Map(document.getElementById('map'), {
+                center: location,
+                zoom: 14,
+                mapTypeControl: false, // Hide map type controls (Map/Satellite/Terrain)
+                streetViewControl: false, // Hide Street View control
+                fullscreenControl: true,
+                clickableIcons: false // Disable default POI click behavior
+            });
+
+            infowindow = new google.maps.InfoWindow({
+                disableAutoPan: false,
+                maxWidth: 300
+            });
+            
+            // Store search bar offset for info window positioning
+            window.searchBarOffset = 120; // Search bar top (80px) + 2em margin (32px) = ~120px
+            service = new google.maps.places.PlacesService(map);
+
+            // Disable default place click handlers and prevent Google Maps place info
+            map.addListener('click', (e) => {
+                // Close our info window
+                infowindow.close();
+            });
+
+            // Additional protection: prevent any default Google Maps place interactions
+            // The clickableIcons: false should handle this, but we add extra safeguards
+            const mapDiv = map.getDiv();
+            
+            // Prevent right-click context menu on map
+            mapDiv.addEventListener('contextmenu', (e) => {
+                e.preventDefault();
+            });
+
+            // Add a marker for user's location (not clickable)
+            const userMarker = new google.maps.Marker({
+                position: location,
+                map: map,
+                title: 'Your Location',
+                clickable: false,
+                icon: {
+                    path: google.maps.SymbolPath.CIRCLE,
+                    scale: 8,
+                    fillColor: '#4285F4',
+                    fillOpacity: 1,
+                    strokeColor: '#ffffff',
+                    strokeWeight: 2
+                }
+            });
+            markers.push(userMarker);
+
+            // Hide loading overlay and show search container
+            document.getElementById('loading-overlay').style.display = 'none';
+            document.getElementById('search-container').style.display = 'block';
+
+            // Update date and weather
+            updateDateAndWeather(location);
+
+            // Load time-based recommendations (3 places)
+            loadTimeBasedRecommendations(location);
+
+            // Setup search input with Autocomplete (but hide Google's dropdown)
+            const input = document.getElementById('places-search');
+            const autocomplete = new google.maps.places.Autocomplete(input, {
+                types: ['establishment'],
+                fields: ['place_id', 'geometry', 'name', 'formatted_address', 'rating', 'photos']
+            });
+
+            // Continuously hide Google Maps autocomplete dropdown
+            const hideGoogleAutocomplete = () => {
+                const pacContainers = document.querySelectorAll('.pac-container');
+                pacContainers.forEach(container => {
+                    container.style.display = 'none';
+                    container.style.visibility = 'hidden';
+                });
+            };
+
+            // Monitor for Google's autocomplete dropdown and hide it immediately
+            const observer = new MutationObserver(() => {
+                hideGoogleAutocomplete();
+            });
+
+            observer.observe(document.body, {
+                childList: true,
+                subtree: true
+            });
+
+            // Hide on various events
+            input.addEventListener('focus', hideGoogleAutocomplete);
+            input.addEventListener('input', hideGoogleAutocomplete);
+            input.addEventListener('keydown', hideGoogleAutocomplete);
+            
+            // Also hide periodically as a fallback
+            setInterval(hideGoogleAutocomplete, 100);
+
+            // Handle mobile keyboard opening/closing
+            setupMobileKeyboardHandling(input);
+
+            autocomplete.addListener('place_changed', () => {
+                const place = autocomplete.getPlace();
+                if (!place.geometry) {
+                    console.log('No details available for input: ' + place.name);
+                    return;
+                }
+
+                // Clear previous markers (but keep user marker)
+                clearMarkers();
+                // Re-add user marker if we have user location
+                if (userLocation) {
+                    const userMarker = new google.maps.Marker({
+                        position: userLocation,
+                        map: map,
+                        title: 'Your Location',
+                        clickable: false,
+                        icon: {
+                            path: google.maps.SymbolPath.CIRCLE,
+                            scale: 8,
+                            fillColor: '#4285F4',
+                            fillOpacity: 1,
+                            strokeColor: '#ffffff',
+                            strokeWeight: 2
+                        }
+                    });
+                    markers.push(userMarker);
+                }
+
+                // Center map on selected place
+                if (place.geometry.viewport) {
+                    map.fitBounds(place.geometry.viewport);
+                } else {
+                    map.setCenter(place.geometry.location);
+                    map.setZoom(17);
+                }
+
+                // Add marker for selected place
+                addMarker(place.geometry.location, place.name, place.formatted_address, place.rating, place.place_id);
+
+                // Search for nearby places
+                searchNearbyPlaces(place.geometry.location);
+            });
+
+            // Setup nearby places search
+            setupNearbySearch();
+        }
+
+        function setupNearbySearch() {
+            const input = document.getElementById('places-search');
+            let searchTimeout;
+
+            input.addEventListener('input', (e) => {
+                clearTimeout(searchTimeout);
+                const query = e.target.value.trim();
+
+                if (query.length < 3) {
+                    document.getElementById('places-list').innerHTML = '';
+                    return;
+                }
+
+                searchTimeout = setTimeout(() => {
+                    if (map.getBounds()) {
+                        performTextSearch(query);
+                    }
+                }, 500);
+            });
+        }
+
+        function performTextSearch(query) {
+            const request = {
+                query: query,
+                fields: ['place_id', 'geometry', 'name', 'formatted_address', 'rating', 'photos'],
+                locationBias: map.getCenter()
+            };
+
+            service.textSearch(request, (results, status) => {
+                if (status === google.maps.places.PlacesServiceStatus.OK && results) {
+                    displayPlacesList(results);
+                } else {
+                    document.getElementById('places-list').innerHTML = 
+                        '<div class="error">No places found. Try a different search.</div>';
+                }
+            });
+        }
+
+        function displayPlacesList(places) {
+            const listContainer = document.getElementById('places-list');
+            
+            if (places.length === 0) {
+                listContainer.innerHTML = '<div class="loading">No places found</div>';
+                return;
+            }
+
+            // Reverse order for mobile (best match at bottom, closest to search bar)
+            const isMobile = window.innerWidth <= 768;
+            const orderedPlaces = isMobile ? [...places].reverse() : places;
+
+            listContainer.innerHTML = orderedPlaces.map((place, index) => {
+                const placeId = place.place_id ? `'${place.place_id.replace(/'/g, "\\'")}'` : 'null';
+                // Highlight first result (best match) - in mobile this is the last item in reversed array
+                const isHighlighted = isMobile ? (index === orderedPlaces.length - 1) : (index === 0);
+                const highlightedClass = isHighlighted ? 'highlighted' : '';
+                return `
+                <div class="place-item ${highlightedClass}" onclick="selectPlace(${place.geometry.location.lat()}, ${place.geometry.location.lng()}, '${place.name.replace(/'/g, "\\'")}', '${place.formatted_address.replace(/'/g, "\\'")}', ${place.rating || 'null'}, ${placeId})">
+                    <div class="place-name">${place.name}</div>
+                    <div class="place-address">${place.formatted_address}</div>
+                    ${place.rating ? `<div style="margin-top: 0.25rem; color: #f39c12;">⭐ ${place.rating}</div>` : ''}
+                </div>
+            `;
+            }).join('');
+        }
+
+        function selectPlace(lat, lng, name, address, rating, placeId) {
+            const location = new google.maps.LatLng(lat, lng);
+            clearMarkers();
+            
+            // Close search results list
+            document.getElementById('places-list').innerHTML = '';
+            
+            // Re-add user location marker
+            if (userLocation) {
+                const userMarker = new google.maps.Marker({
+                    position: userLocation,
+                    map: map,
+                    title: 'Your Location',
+                    clickable: false,
+                    icon: {
+                        path: google.maps.SymbolPath.CIRCLE,
+                        scale: 8,
+                        fillColor: '#4285F4',
+                        fillOpacity: 1,
+                        strokeColor: '#ffffff',
+                        strokeWeight: 2
+                    }
+                });
+                markers.push(userMarker);
+            }
+            
+            map.setCenter(location);
+            map.setZoom(17);
+            const marker = addMarker(location, name, address, rating, placeId);
+            
+            // Open info window automatically when selecting from list
+            setTimeout(() => {
+                const escapedName = name.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                const escapedAddress = address.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                const placeIdParam = placeId && placeId !== 'null' ? `'${placeId.replace(/'/g, "\\'")}'` : 'null';
+                const content = `
+                    <div style="padding: 0.5rem; min-width: 200px;">
+                        <h3 style="margin-bottom: 0.5rem; font-size: 1.1rem; margin-top: 0; padding-top: 0;">${escapedName}</h3>
+                        <p style="margin-bottom: 0.5rem; color: #666; font-size: 0.9rem;">${escapedAddress}</p>
+                        ${rating ? `<p style="color: #f39c12; margin-bottom: 0.75rem;">⭐ ${rating}</p>` : ''}
+                        <button class="go-here-btn" onclick="openSidePanel(${lat}, ${lng}, '${escapedName.replace(/'/g, "\\'")}', '${escapedAddress.replace(/'/g, "\\'")}', ${rating || 'null'}, ${placeIdParam})">Go here</button>
+                    </div>
+                `;
+                infowindow.setContent(content);
+                
+                // Ensure info window has margin from search bar by adjusting map pan if needed
+                ensureInfoWindowMargin(marker);
+                
+                infowindow.open(map, marker);
+                
+                // After opening, adjust position if needed to ensure margin from search bar
+                setTimeout(() => {
+                    adjustInfoWindowPosition(marker);
+                }, 200);
+            }, 100);
+            
+            searchNearbyPlaces(location);
+        }
+
+        function searchNearbyPlaces(location) {
+            // Clear recommendation markers when searching
+            clearRecommendationMarkers();
+            const headlineEl = document.getElementById('recommendations-headline');
+            if (headlineEl) {
+                headlineEl.style.display = 'none';
+            }
+            
+            // 4 miles = 6437 meters (approximately)
+            const radiusInMeters = 6437;
+            
+            const request = {
+                location: location,
+                radius: radiusInMeters,
+                type: ['establishment'],
+                fields: ['place_id', 'geometry', 'name', 'formatted_address', 'rating', 'photos', 'types']
+            };
+
+            // Don't update the search results list - this is for map markers only
+            service.nearbySearch(request, (results, status) => {
+                if (status === google.maps.places.PlacesServiceStatus.OK && results) {
+                    // Clear existing markers (but keep user location marker if it exists)
+                    clearMarkers();
+                    
+                    // Re-add user location marker
+                    if (userLocation) {
+                        const userMarker = new google.maps.Marker({
+                            position: userLocation,
+                            map: map,
+                            title: 'Your Location',
+                            icon: {
+                                path: google.maps.SymbolPath.CIRCLE,
+                                scale: 8,
+                                fillColor: '#4285F4',
+                                fillOpacity: 1,
+                                strokeColor: '#ffffff',
+                                strokeWeight: 2
+                            }
+                        });
+                        markers.push(userMarker);
+                    }
+
+                    // Add markers for nearby places
+                    results.forEach(place => {
+                        if (place.geometry && place.geometry.location) {
+                            addMarker(
+                                place.geometry.location,
+                                place.name,
+                                place.formatted_address,
+                                place.rating,
+                                place.place_id
+                            );
+                        }
+                    });
+
+                    // Don't update search results list - this function is for map markers only
+                } else {
+                    console.error('Places search error:', status);
+                }
+            });
+        }
+
+        // Ensure info window has proper margin from search bar by panning map if needed
+        function ensureInfoWindowMargin(marker) {
+            const searchBarOffset = window.searchBarOffset || 120; // Default 120px (80px search bar + 2em/32px margin)
+            const markerPosition = marker.getPosition();
+            
+            // Check if marker is in upper portion of visible map
+            const bounds = map.getBounds();
+            if (bounds) {
+                const ne = bounds.getNorthEast();
+                const sw = bounds.getSouthWest();
+                const latRange = ne.lat() - sw.lat();
+                const markerLat = markerPosition.lat();
+                const markerLatPercent = (markerLat - sw.lat()) / latRange;
+                
+                // If marker is in upper 25% of visible area, pan map down slightly
+                // This ensures info window appears below search bar with proper margin
+                if (markerLatPercent > 0.75) {
+                    const currentCenter = map.getCenter();
+                    const panDistance = (markerLatPercent - 0.65) * latRange * 0.25; // Pan down
+                    const newCenter = new google.maps.LatLng(
+                        currentCenter.lat() - panDistance,
+                        currentCenter.lng()
+                    );
+                    map.panTo(newCenter);
+                }
+            }
+        }
+
+        // Adjust info window position after it opens to ensure margin from search bar
+        function adjustInfoWindowPosition(marker) {
+            // Check if info window is visible and too close to top
+            const infoWindowElement = document.querySelector('.gm-style-iw-d');
+            if (infoWindowElement) {
+                const rect = infoWindowElement.getBoundingClientRect();
+                const searchBarOffset = window.searchBarOffset || 120;
+                
+                // If info window top is above the search bar margin, pan map down
+                if (rect.top < searchBarOffset) {
+                    const currentCenter = map.getCenter();
+                    const panDistance = (searchBarOffset - rect.top + 20) / 111000; // Convert pixels to degrees (approx)
+                    const newCenter = new google.maps.LatLng(
+                        currentCenter.lat() - panDistance,
+                        currentCenter.lng()
+                    );
+                    map.panTo(newCenter);
+                }
+            }
+        }
+
+        // Update date and weather display
+        function updateDateAndWeather(location) {
+            // Update current date
+            const today = new Date();
+            const dateStr = today.toLocaleDateString('en-US', { 
+                weekday: 'short', 
+                month: 'short', 
+                day: 'numeric' 
+            });
+            document.getElementById('current-date').textContent = dateStr;
+
+            // Fetch weather using OpenWeatherMap API (free tier)
+            // Note: You'll need to add OPENWEATHER_API_KEY to your .env file
+            fetchWeather(location);
+        }
+
+        async function fetchWeather(location) {
+            const weatherEl = document.getElementById('current-weather');
+            const cacheKey = 'weather_cache';
+            const cacheExpiry = 30 * 60 * 1000; // 30 minutes in milliseconds
+            
+            // Check cache first
+            try {
+                const cached = localStorage.getItem(cacheKey);
+                if (cached) {
+                    const cacheData = JSON.parse(cached);
+                    const now = Date.now();
+                    if (now - cacheData.timestamp < cacheExpiry) {
+                        weatherEl.textContent = cacheData.weather;
+                        return;
+                    }
+                }
+            } catch (e) {
+                // Cache read failed, continue to fetch
+            }
+            
+            weatherEl.textContent = 'Loading...';
+
+            try {
+                // Using OpenWeatherMap free API
+                // You can get a free API key from https://openweathermap.org/api
+                // For now, we'll use a free alternative: wttr.in (no API key needed)
+                let weatherText = null;
+                const response = await fetch(
+                    `https://wttr.in/?format=%C+%t&lang=en`,
+                    { 
+                        method: 'GET',
+                        headers: {
+                            'Accept': 'text/plain'
+                        }
+                    }
+                );
+
+                if (response.ok) {
+                    weatherText = (await response.text()).trim();
+                } else {
+                    // Fallback: try with coordinates if available
+                    if (location && location.lat && location.lng) {
+                        const coordResponse = await fetch(
+                            `https://wttr.in/${location.lat},${location.lng}?format=%C+%t&lang=en`,
+                            { 
+                                method: 'GET',
+                                headers: {
+                                    'Accept': 'text/plain'
+                                }
+                            }
+                        );
+                        if (coordResponse.ok) {
+                            weatherText = (await coordResponse.text()).trim();
+                        }
+                    }
+                }
+                
+                const displayText = weatherText || 'Weather unavailable';
+                weatherEl.textContent = displayText;
+                
+                // Store current weather for recommendations
+                currentWeather = displayText.toLowerCase();
+                
+                // Cache the result
+                try {
+                    localStorage.setItem(cacheKey, JSON.stringify({
+                        weather: displayText,
+                        timestamp: Date.now()
+                    }));
+                } catch (e) {
+                    // Cache write failed, ignore
+                }
+            } catch (error) {
+                console.error('Error fetching weather:', error);
+                weatherEl.textContent = 'Weather unavailable';
+            }
+        }
+
+        // Center map on user location
+        function centerOnUserLocation() {
+            if (userLocation) {
+                map.setCenter(userLocation);
+                map.setZoom(15);
+            } else if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                    (position) => {
+                        userLocation = {
+                            lat: position.coords.latitude,
+                            lng: position.coords.longitude
+                        };
+                        // Cache user location in localStorage
+                        localStorage.setItem('userLocation', JSON.stringify(userLocation));
+                        map.setCenter(userLocation);
+                        map.setZoom(15);
+                    },
+                    (error) => {
+                        alert('Unable to get your location. Please enable location services.');
+                    }
+                );
+            } else {
+                alert('Geolocation is not supported by your browser.');
+            }
+        }
+
+        let selectedPlace = null;
+
+        function addMarker(location, name, address, rating, placeId) {
+            const marker = new google.maps.Marker({
+                position: location,
+                map: map,
+                title: name,
+                clickable: true,
+                optimized: false // Prevents marker clustering issues
+            });
+
+            // Escape HTML to prevent XSS
+            const escapedName = name.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            const escapedAddress = address.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+            const lat = typeof location.lat === 'function' ? location.lat() : location.lat;
+            const lng = typeof location.lng === 'function' ? location.lng() : location.lng;
+            const placeIdParam = placeId && placeId !== 'null' ? `'${placeId.replace(/'/g, "\\'")}'` : 'null';
+
+            const content = `
+                <div style="padding: 0.5rem; min-width: 200px;">
+                    <h3 style="margin-bottom: 0.5rem; font-size: 1.1rem; margin-top: 0; padding-top: 0;">${escapedName}</h3>
+                    <p style="margin-bottom: 0.5rem; color: #666; font-size: 0.9rem;">${escapedAddress}</p>
+                    ${rating ? `<p style="color: #f39c12; margin-bottom: 0.75rem;">⭐ ${rating}</p>` : ''}
+                    <button class="go-here-btn" onclick="openSidePanel(${lat}, ${lng}, '${escapedName.replace(/'/g, "\\'")}', '${escapedAddress.replace(/'/g, "\\'")}', ${rating || 'null'}, ${placeIdParam})">Go here</button>
+                </div>
+            `;
+
+            marker.addListener('click', (e) => {
+                // Close any existing info windows first
+                infowindow.close();
+                
+                // Stop event propagation to prevent Google Maps default behavior
+                if (e && e.stopPropagation) {
+                    e.stopPropagation();
+                }
+                
+                // Small delay to ensure the info window opens properly
+                setTimeout(() => {
+                infowindow.setContent(content);
+                    
+                    // Ensure info window has margin from search bar
+                    ensureInfoWindowMargin(marker);
+                    
+                infowindow.open(map, marker);
+                    
+                    // After opening, adjust position if needed
+                    setTimeout(() => {
+                        adjustInfoWindowPosition(marker);
+                    }, 200);
+                }, 10);
+            });
+
+            markers.push(marker);
+            return marker; // Return marker for use in selectPlace
+        }
+
+        function clearMarkers() {
+            markers.forEach(marker => marker.setMap(null));
+            markers = [];
+        }
+        
+        function clearRecommendationMarkers() {
+            recommendationMarkers.forEach(marker => marker.setMap(null));
+            recommendationMarkers = [];
+        }
+        
+        // Time-based recommendations
+        async function loadTimeBasedRecommendations(location) {
+            if (!location || !service) return;
+            
+            const now = new Date();
+            const hour = now.getHours();
+            const isSunny = currentWeather && (currentWeather.includes('sunny') || currentWeather.includes('clear') || currentWeather.includes('sun'));
+            
+            // Determine place types based on time and weather
+            let placeTypes = [];
+            let headline = '';
+            
+            if (hour >= 5 && hour < 11) {
+                // Morning: breakfast/coffee
+                placeTypes = ['cafe', 'bakery', 'restaurant'];
+                headline = '☕ Three breakfast and coffee places you can walk to now';
+            } else if (hour >= 11 && hour < 14) {
+                // Lunch time
+                placeTypes = ['restaurant', 'food', 'meal_takeaway'];
+                headline = '🍽️ Three lunch places you can walk to now';
+            } else if (hour >= 14 && hour < 17) {
+                // After lunch
+                if (isSunny) {
+                    placeTypes = ['park'];
+                    headline = '🌳 Three parks you can walk to now';
+                } else {
+                    placeTypes = ['book_store', 'library'];
+                    headline = '📚 Three bookstores you can walk to now';
+                }
+            } else if (hour >= 17 && hour < 19) {
+                // Dinner time (5-7pm)
+                placeTypes = ['restaurant', 'food'];
+                headline = '🍴 Three dinner restaurants you can walk to now';
+            } else if (hour >= 19 && hour < 24) {
+                // Late night (7pm-12am): bars
+                placeTypes = ['bar', 'night_club'];
+                headline = '🍺 Three bars you can walk to now';
+            } else {
+                // Late night/early morning (12am-5am): bars or cafes
+                placeTypes = ['bar', 'cafe'];
+                headline = '🌙 Three places open now you can walk to';
+            }
+            
+            // Show headline
+            const headlineEl = document.getElementById('recommendations-headline');
+            if (headlineEl) {
+                headlineEl.textContent = headline;
+                headlineEl.style.display = 'block';
+            }
+            
+            // Clear previous recommendation markers
+            clearRecommendationMarkers();
+            
+            // Search for places (walking distance = ~1 mile = 1609 meters)
+            const radiusInMeters = 1609; // 1 mile for walking distance
+            const allPlaces = [];
+            
+            // Search for each place type
+            for (const type of placeTypes) {
+                const request = {
+                    location: location,
+                    radius: radiusInMeters,
+                    type: type,
+                    openNow: true // Only show open places
+                };
+                
+                await new Promise((resolve) => {
+                    service.nearbySearch(request, (results, status) => {
+                        if (status === google.maps.places.PlacesServiceStatus.OK && results) {
+                            // Filter to only open places and add to allPlaces
+                            results.forEach(place => {
+                                if (place.opening_hours && place.opening_hours.open_now) {
+                                    allPlaces.push(place);
+                                }
+                            });
+                        }
+                        resolve();
+                    });
+                });
+            }
+            
+            // Remove duplicates and limit to 3
+            const uniquePlaces = [];
+            const seenPlaceIds = new Set();
+            
+            for (const place of allPlaces) {
+                if (!seenPlaceIds.has(place.place_id) && uniquePlaces.length < 3) {
+                    seenPlaceIds.add(place.place_id);
+                    uniquePlaces.push(place);
+                }
+            }
+            
+            // Add recommendation markers
+            uniquePlaces.forEach(place => {
+                addRecommendationMarker(
+                    place.geometry.location,
+                    place.name,
+                    place.formatted_address || place.vicinity,
+                    place.rating,
+                    place.place_id
+                );
+            });
+        }
+        
+        function addRecommendationMarker(location, name, address, rating, placeId) {
+            // Create custom icon for recommendation markers (different color)
+            const icon = {
+                path: google.maps.SymbolPath.CIRCLE,
+                scale: 8,
+                fillColor: '#28a745', // Green color for recommendations
+                fillOpacity: 1,
+                strokeColor: '#ffffff',
+                strokeWeight: 2
+            };
+            
+            const marker = new google.maps.Marker({
+                position: location,
+                map: map,
+                title: name,
+                icon: icon,
+                clickable: true,
+                optimized: false
+            });
+            
+            // Escape HTML
+            const escapedName = name.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            const escapedAddress = address.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            
+            const lat = typeof location.lat === 'function' ? location.lat() : location.lat;
+            const lng = typeof location.lng === 'function' ? location.lng() : location.lng;
+            const placeIdParam = placeId && placeId !== 'null' ? `'${placeId.replace(/'/g, "\\'")}'` : 'null';
+            
+            // Different background color for recommendation info window
+            const content = `
+                <div style="padding: 0.5rem; min-width: 200px; background: linear-gradient(135deg, #28a745 0%, #20c997 100%); border-radius: 6px;">
+                    <div style="background: white; padding: 0.75rem; border-radius: 4px;">
+                        <h3 style="margin-bottom: 0.5rem; font-size: 1.1rem; margin-top: 0; padding-top: 0; color: #333;">${escapedName}</h3>
+                        <p style="margin-bottom: 0.5rem; color: #666; font-size: 0.9rem;">${escapedAddress}</p>
+                        ${rating ? `<p style="color: #f39c12; margin-bottom: 0.75rem;">⭐ ${rating}</p>` : ''}
+                        <button class="go-here-btn" onclick="openSidePanel(${lat}, ${lng}, '${escapedName.replace(/'/g, "\\'")}', '${escapedAddress.replace(/'/g, "\\'")}', ${rating || 'null'}, ${placeIdParam})" style="background: #28a745; color: white; border: none; padding: 0.5rem 1rem; border-radius: 4px; cursor: pointer; font-weight: 600;">Go here</button>
+                    </div>
+                </div>
+            `;
+            
+            marker.addListener('click', (e) => {
+                infowindow.close();
+                if (e && e.stopPropagation) {
+                    e.stopPropagation();
+                }
+                setTimeout(() => {
+                    infowindow.setContent(content);
+                    ensureInfoWindowMargin(marker);
+                    infowindow.open(map, marker);
+                    setTimeout(() => {
+                        adjustInfoWindowPosition(marker);
+                    }, 100);
+                }, 50);
+            });
+            
+            recommendationMarkers.push(marker);
+        }
+
+        // Side Panel Functions
+        function openSidePanel(lat, lng, name, address, rating, placeId) {
+            if (!requireAuth(() => true)) return;
+            selectedPlace = {
+                latitude: lat,
+                longitude: lng,
+                place_name: name,
+                address: address,
+                rating: rating,
+                place_id: placeId,
+                place_type: null, // Will be set when fetched
+                opening_hours: null // Will be set when fetched
+            };
+
+            // Update selected place info
+            document.getElementById('selected-place-name').textContent = name;
+            document.getElementById('selected-place-address').textContent = address;
+            
+            // Create Google Maps directions link
+            const directionsUrl = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(address)}`;
+            const addressLink = document.getElementById('selected-place-address-link');
+            addressLink.href = directionsUrl;
+            
+            // Fetch place details including business hours and types
+            if (placeId && service) {
+                const request = {
+                    placeId: placeId,
+                    fields: ['opening_hours', 'formatted_address', 'types']
+                };
+                
+                service.getDetails(request, (place, status) => {
+                    if (status === google.maps.places.PlacesServiceStatus.OK && place) {
+                        const hoursEl = document.getElementById('selected-place-hours');
+                        if (place.opening_hours && place.opening_hours.weekday_text) {
+                            // Store opening hours for date/time filtering
+                            selectedPlace.opening_hours = place.opening_hours;
+                            
+                            // Display all days' hours
+                            const allHours = place.opening_hours.weekday_text.map(dayHours => 
+                                `<div style="margin-bottom: 0.25rem;">${dayHours}</div>`
+                            ).join('');
+                            hoursEl.innerHTML = `<strong>Hours:</strong><div style="margin-top: 0.5rem;">${allHours}</div>`;
+                            
+                            // Setup date and time filtering
+                            setupDateAndTimeFiltering(place.opening_hours);
+                        } else {
+                            hoursEl.innerHTML = '<strong>Hours:</strong> Hours unknown';
+                            selectedPlace.opening_hours = null;
+                        }
+                        
+                        // Extract place type from types array
+                        if (place.types && place.types.length > 0) {
+                            // Filter out generic types and get the first meaningful one
+                            const meaningfulTypes = place.types.filter(type => 
+                                !['establishment', 'point_of_interest', 'geocode'].includes(type)
+                            );
+                            if (meaningfulTypes.length > 0) {
+                                // Capitalize first letter of each word
+                                const typeStr = meaningfulTypes[0].split('_').map(word => 
+                                    word.charAt(0).toUpperCase() + word.slice(1)
+                                ).join(' ');
+                                selectedPlace.place_type = typeStr;
+                            } else {
+                                selectedPlace.place_type = 'Place';
+                            }
+                        } else {
+                            selectedPlace.place_type = 'Place';
+                        }
+                    } else {
+                        document.getElementById('selected-place-hours').innerHTML = '<strong>Hours:</strong> Hours unknown';
+                        selectedPlace.place_type = 'Place';
+                        selectedPlace.opening_hours = null;
+                    }
+                });
+            } else {
+                document.getElementById('selected-place-hours').innerHTML = '<strong>Hours:</strong> Hours unknown';
+                selectedPlace.place_type = 'Place';
+            }
+
+            // Set default date to today and set minimum to today
+            const today = new Date();
+            const dateStr = today.toISOString().split('T')[0];
+            const dateInput = document.getElementById('destination-date');
+            dateInput.value = dateStr;
+            dateInput.min = dateStr; // Prevent selecting past dates
+
+            // Reset time section (collapsed by default)
+            document.getElementById('time-section').style.display = 'none';
+            document.getElementById('toggle-time-btn').classList.remove('expanded');
+            document.getElementById('toggle-time-btn').textContent = '+';
+            document.getElementById('destination-time').value = '';
+
+            // Open side panel
+            document.getElementById('side-panel').classList.add('open');
+        }
+
+        // Setup date and time filtering based on opening hours
+        function setupDateAndTimeFiltering(openingHours) {
+            if (!openingHours || !openingHours.weekday_text) {
+                return; // No hours data, skip filtering
+            }
+
+            const dateInput = document.getElementById('destination-date');
+            const timeInput = document.getElementById('destination-time');
+
+            // Parse opening hours to determine which days are open
+            const openDays = new Set();
+            const hoursByDay = {};
+            
+            openingHours.weekday_text.forEach((dayText, index) => {
+                // Parse day name and hours (e.g., "Monday: 9:00 AM – 5:00 PM" or "Monday: Closed")
+                const match = dayText.match(/^(\w+):\s*(.+)$/);
+                if (match) {
+                    const dayName = match[1];
+                    const hours = match[2];
+                    
+                    if (hours.toLowerCase() !== 'closed') {
+                        openDays.add(index);
+                        hoursByDay[index] = hours;
+                    }
+                }
+            });
+
+            // Add event listener to date input to filter time when date changes
+            dateInput.addEventListener('change', function() {
+                const selectedDate = new Date(this.value);
+                const dayOfWeek = selectedDate.getDay();
+                
+                if (openDays.has(dayOfWeek)) {
+                    // Day is open - filter time hours
+                    const hoursText = hoursByDay[dayOfWeek];
+                    filterTimeInput(timeInput, hoursText);
+                    // Remove error message if it exists
+                    const errorMsg = dateInput.parentElement.querySelector('.date-error');
+                    if (errorMsg) {
+                        errorMsg.remove();
+                    }
+                    dateInput.setCustomValidity('');
+                } else {
+                    // Day is closed - show error and reset date
+                    timeInput.disabled = true;
+                    timeInput.value = '';
+                    dateInput.setCustomValidity('This business is closed on this day. Please select a different date.');
+                    
+                    // Show error message
+                    let errorMsg = dateInput.parentElement.querySelector('.date-error');
+                    if (!errorMsg) {
+                        errorMsg = document.createElement('div');
+                        errorMsg.className = 'date-error';
+                        errorMsg.style.color = '#e74c3c';
+                        errorMsg.style.fontSize = '0.875rem';
+                        errorMsg.style.marginTop = '0.25rem';
+                        dateInput.parentElement.appendChild(errorMsg);
+                    }
+                    errorMsg.textContent = 'This business is closed on this day. Please select a different date.';
+                    
+                    // Reset to today or next open day
+                    const today = new Date();
+                    let nextOpenDate = new Date(today);
+                    for (let i = 0; i < 14; i++) {
+                        const checkDate = new Date(today);
+                        checkDate.setDate(today.getDate() + i);
+                        if (openDays.has(checkDate.getDay())) {
+                            nextOpenDate = checkDate;
+                            break;
+                        }
+                    }
+                    dateInput.value = nextOpenDate.toISOString().split('T')[0];
+                    dateInput.reportValidity();
+                }
+            });
+
+            // Also filter time input when time section is opened
+            const toggleBtn = document.getElementById('toggle-time-btn');
+            toggleBtn.addEventListener('click', function() {
+                setTimeout(() => {
+                    const isExpanded = document.getElementById('time-section').style.display !== 'none';
+                    if (isExpanded && dateInput.value) {
+                        const selectedDate = new Date(dateInput.value);
+                        const dayOfWeek = selectedDate.getDay();
+                        if (openDays.has(dayOfWeek)) {
+                            const hoursText = hoursByDay[dayOfWeek];
+                            filterTimeInput(timeInput, hoursText);
+                        }
+                    }
+                }, 100);
+            });
+        }
+
+        // Filter time input based on opening hours
+        function filterTimeInput(timeInput, hoursText) {
+            // Parse hours (e.g., "9:00 AM – 5:00 PM" or "24 hours")
+            const timeRange = parseHoursText(hoursText);
+            if (!timeRange) {
+                timeInput.disabled = false;
+                return; // Can't parse, allow all times
+            }
+
+            timeInput.disabled = false;
+            timeInput.min = timeRange.start;
+            timeInput.max = timeRange.end;
+        }
+
+        // Parse hours text to get time range
+        function parseHoursText(hoursText) {
+            // Handle 24 hours
+            if (hoursText.toLowerCase().includes('24 hours')) {
+                return { start: '00:00', end: '23:59' };
+            }
+
+            // Parse format like "9:00 AM – 5:00 PM"
+            const match = hoursText.match(/(\d{1,2}):(\d{2})\s*(AM|PM)\s*[–-]\s*(\d{1,2}):(\d{2})\s*(AM|PM)/i);
+            if (match) {
+                const startHour = parseInt(match[1]);
+                const startMin = parseInt(match[2]);
+                const startPeriod = match[3].toUpperCase();
+                const endHour = parseInt(match[4]);
+                const endMin = parseInt(match[5]);
+                const endPeriod = match[6].toUpperCase();
+
+                let startHour24 = startHour;
+                if (startPeriod === 'PM' && startHour !== 12) startHour24 += 12;
+                if (startPeriod === 'AM' && startHour === 12) startHour24 = 0;
+
+                let endHour24 = endHour;
+                if (endPeriod === 'PM' && endHour !== 12) endHour24 += 12;
+                if (endPeriod === 'AM' && endHour === 12) endHour24 = 0;
+
+                return {
+                    start: `${String(startHour24).padStart(2, '0')}:${String(startMin).padStart(2, '0')}`,
+                    end: `${String(endHour24).padStart(2, '0')}:${String(endMin).padStart(2, '0')}`
+                };
+            }
+
+            return null;
+        }
+
+        function toggleTimeSection() {
+            const timeSection = document.getElementById('time-section');
+            const toggleBtn = document.getElementById('toggle-time-btn');
+            const isExpanded = timeSection.style.display !== 'none';
+            
+            if (isExpanded) {
+                timeSection.style.display = 'none';
+                toggleBtn.classList.remove('expanded');
+                toggleBtn.textContent = '+';
+            } else {
+                timeSection.style.display = 'block';
+                toggleBtn.classList.add('expanded');
+                toggleBtn.textContent = '−';
+                
+                // Set default time if empty
+                const timeInput = document.getElementById('destination-time');
+                if (!timeInput.value) {
+                    const today = new Date();
+                    const hours = today.getHours().toString().padStart(2, '0');
+                    const minutes = Math.round(today.getMinutes() / 15) * 15;
+                    const timeStr = `${hours}:${minutes.toString().padStart(2, '0')}`;
+                    timeInput.value = timeStr;
+                }
+            }
+        }
+
+        function closeSidePanel() {
+            document.getElementById('side-panel').classList.remove('open');
+            selectedPlace = null;
+        }
+
+        // Destinations Panel Functions
+        function openDestinationsPanel() {
+            if (!requireAuth(() => true)) return;
+            document.getElementById('destinations-panel').classList.add('open');
+            loadDestinationsList();
+            if (document.getElementById('destinations-calendar-view').classList.contains('active')) {
+                renderCalendar();
+            }
+        }
+
+        function closeDestinationsPanel() {
+            document.getElementById('destinations-panel').classList.remove('open');
+        }
+
+        function switchDestinationsView(view) {
+            document.querySelectorAll('.view-btn').forEach(btn => btn.classList.remove('active'));
+            document.querySelectorAll('.destinations-view').forEach(viewEl => viewEl.classList.remove('active'));
+
+            if (view === 'list') {
+                document.querySelector('.view-btn:first-child').classList.add('active');
+                document.getElementById('destinations-list-view').classList.add('active');
+                loadDestinationsList();
+            } else if (view === 'calendar') {
+                document.querySelector('.view-btn:last-child').classList.add('active');
+                document.getElementById('destinations-calendar-view').classList.add('active');
+                renderCalendar();
+            }
+        }
+
+        let currentCalendarDate = new Date();
+
+        function navigateCalendar(direction) {
+            currentCalendarDate.setMonth(currentCalendarDate.getMonth() + direction);
+            renderCalendar();
+        }
+
+        function renderCalendar() {
+            // Hide day view when navigating calendar
+            document.getElementById('day-view').style.display = 'none';
+            
+            const year = currentCalendarDate.getFullYear();
+            const month = currentCalendarDate.getMonth();
+            
+            // Update month/year header
+            const monthNames = ['January', 'February', 'March', 'April', 'May', 'June',
+                'July', 'August', 'September', 'October', 'November', 'December'];
+            document.getElementById('calendar-month-year').textContent = 
+                `${monthNames[month]} ${year}`;
+
+            // Get first day of month and number of days
+            const firstDay = new Date(year, month, 1);
+            const lastDay = new Date(year, month + 1, 0);
+            const daysInMonth = lastDay.getDate();
+            const startingDayOfWeek = firstDay.getDay();
+
+            // Load destinations for calendar
+            loadDestinationsForCalendar(year, month + 1).then(destinations => {
+                const grid = document.getElementById('calendar-grid');
+                grid.innerHTML = '';
+
+                // Day headers
+                const dayHeaders = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+                dayHeaders.forEach(day => {
+                    const header = document.createElement('div');
+                    header.className = 'calendar-day-header';
+                    header.textContent = day;
+                    grid.appendChild(header);
+                });
+
+                // Empty cells for days before month starts
+                for (let i = 0; i < startingDayOfWeek; i++) {
+                    const emptyDay = document.createElement('div');
+                    emptyDay.className = 'calendar-day other-month';
+                    grid.appendChild(emptyDay);
+                }
+
+                // Days of the month
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                for (let day = 1; day <= daysInMonth; day++) {
+                    const dayEl = document.createElement('div');
+                    const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                    const dayDate = new Date(year, month, day);
+                    dayDate.setHours(0, 0, 0, 0);
+                    
+                    dayEl.className = 'calendar-day';
+                    
+                    // Check if today
+                    if (dayDate.getTime() === today.getTime()) {
+                        dayEl.classList.add('today');
+                    }
+                    
+                    // Check if past
+                    if (dayDate < today) {
+                        dayEl.classList.add('past');
+                    }
+
+                    // Check for events on this day (including cancelled)
+                    const dayEvents = destinations.filter(d => {
+                        const eventDate = new Date(d.scheduled_date);
+                        return eventDate.getFullYear() === year && 
+                               eventDate.getMonth() === month && 
+                               eventDate.getDate() === day;
+                    });
+
+                    if (dayEvents.length > 0) {
+                        dayEl.classList.add('has-event', 'clickable');
+                        dayEl.innerHTML = `
+                            <div class="calendar-day-number">${day}</div>
+                            <div class="calendar-day-events">${dayEvents.length} event${dayEvents.length > 1 ? 's' : ''}</div>
+                        `;
+                        dayEl.onclick = () => showDayView(year, month, day, dayEvents);
+                    } else {
+                        dayEl.innerHTML = `<div class="calendar-day-number">${day}</div>`;
+                    }
+
+                    grid.appendChild(dayEl);
+                }
+            });
+        }
+
+        function showDayView(year, month, day, events) {
+            const dayView = document.getElementById('day-view');
+            const dayViewHeader = document.getElementById('day-view-header');
+            const dayViewEvents = document.getElementById('day-view-events');
+
+            const date = new Date(year, month, day);
+            const dateStr = date.toLocaleDateString('en-US', { 
+                weekday: 'long', 
+                year: 'numeric', 
+                month: 'long', 
+                day: 'numeric' 
+            });
+            
+            dayViewHeader.textContent = dateStr;
+
+            // Sort events by time (all-day events first, then by time)
+            events.sort((a, b) => {
+                if (!a.scheduled_time && !b.scheduled_time) return 0;
+                if (!a.scheduled_time) return -1; // All-day events first
+                if (!b.scheduled_time) return 1;
+                return a.scheduled_time.localeCompare(b.scheduled_time);
+            });
+
+            if (events.length === 0) {
+                dayViewEvents.innerHTML = '<div class="loading">No events for this day</div>';
+            } else {
+                dayViewEvents.innerHTML = events.map(event => {
+                    const timeStr = event.scheduled_time ? event.scheduled_time.substring(0, 5) : 'All day';
+                    const status = event.status || 'active';
+                    const statusClass = `status-${status}`;
+                    const statusLabel = status.charAt(0).toUpperCase() + status.slice(1);
+                    const isCancelled = status === 'cancelled';
+
+                    const placeType = event.place_type || 'Place';
+                    const organizerName = event.organizer_name || (event.is_organizer ? 'You' : 'Unknown');
+                    const participationBadge = event.participation_type ? `<span style="font-size: 0.75rem; color: #667eea; margin-left: 0.5rem;">(${event.participation_type === 'joined' ? 'Joined' : 'Interested'})</span>` : '';
+                    return `
+                        <div class="day-view-event ${isCancelled ? 'cancelled' : ''}" data-event-id="${event.id}" onclick="showEventViewFromId(${event.id})">
+                            <div style="display: flex; justify-content: space-between; align-items: start;">
+                                <div style="flex: 1;">
+                                    <div style="font-weight: 600; margin-bottom: 0.25rem; display: flex; justify-content: space-between; align-items: center;">
+                                        <span>${escapeHtml(event.place_name)}${participationBadge}</span>
+                                        <span class="destination-status ${statusClass}" style="float: right;">${statusLabel}</span>
+                                    </div>
+                                    <div style="font-size: 0.875rem; color: #666; margin-bottom: 0.25rem;">${escapeHtml(placeType)}</div>
+                                    <div style="font-size: 0.875rem; color: #666; margin-bottom: 0.25rem;">${escapeHtml(organizerName)}</div>
+                                    <div style="font-size: 0.875rem; color: #666;">${timeStr}</div>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+            }
+
+            dayView.style.display = 'block';
+            // Add extra whitespace at bottom for better alignment
+            dayView.style.paddingBottom = '6rem';
+            
+            // Scroll to day view
+            setTimeout(() => {
+                dayView.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }, 100);
+        }
+
+        function toggleInviteSection() {
+            const inviteSection = document.getElementById('invite-section');
+            const toggleBtn = document.getElementById('toggle-invite-btn');
+            const isExpanded = inviteSection.style.display !== 'none';
+            
+            if (isExpanded) {
+                inviteSection.style.display = 'none';
+                toggleBtn.classList.remove('expanded');
+                toggleBtn.textContent = '+';
+            } else {
+                inviteSection.style.display = 'block';
+                toggleBtn.classList.add('expanded');
+                toggleBtn.textContent = '−';
+            }
+        }
+
+        function scrollToCalendar() {
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        function scrollToTop() {
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        // Handle mobile keyboard opening/closing to adjust search bar position
+        function setupMobileKeyboardHandling(input) {
+            const searchContainer = document.getElementById('search-container');
+            if (!searchContainer) return;
+            
+            // Only apply on mobile devices
+            if (window.innerWidth > 768) return;
+            
+            // Capture initial viewport height when search container becomes visible
+            let initialViewportHeight = window.innerHeight;
+            // Update initial height when search container is shown
+            const updateInitialHeight = () => {
+                initialViewportHeight = window.innerHeight;
+            };
+            updateInitialHeight();
+            
+            let isKeyboardOpen = false;
+
+            // Use Visual Viewport API if available (modern browsers)
+            if (window.visualViewport) {
+                const handleViewportResize = () => {
+                    const currentHeight = window.visualViewport.height;
+                    const heightDiff = initialViewportHeight - currentHeight;
+                    
+                    // If viewport height decreased significantly, keyboard is likely open
+                    if (heightDiff > 150) {
+                        isKeyboardOpen = true;
+                        // Position search bar above keyboard with 10px margin
+                        searchContainer.style.bottom = `${heightDiff + 10}px`;
+                    } else {
+                        isKeyboardOpen = false;
+                        // Reset to bottom margin
+                        searchContainer.style.bottom = '1rem';
+                    }
+                };
+                
+                window.visualViewport.addEventListener('resize', handleViewportResize);
+                window.visualViewport.addEventListener('scroll', handleViewportResize);
+            } else {
+                // Fallback for older browsers
+                let lastHeight = window.innerHeight;
+                
+                const handleWindowResize = () => {
+                    const currentHeight = window.innerHeight;
+                    const heightDiff = lastHeight - currentHeight;
+                    
+                    if (heightDiff > 150) {
+                        // Keyboard likely opened
+                        isKeyboardOpen = true;
+                        searchContainer.style.bottom = `${heightDiff + 10}px`;
+                    } else if (heightDiff < -50) {
+                        // Keyboard likely closed
+                        isKeyboardOpen = false;
+                        searchContainer.style.bottom = '1rem';
+                        lastHeight = currentHeight;
+                    }
+                };
+                
+                window.addEventListener('resize', handleWindowResize);
+            }
+
+            // Also handle focus/blur events for immediate feedback
+            input.addEventListener('focus', () => {
+                // Small delay to let keyboard animation complete
+                setTimeout(() => {
+                    if (window.visualViewport) {
+                        const heightDiff = initialViewportHeight - window.visualViewport.height;
+                        if (heightDiff > 150) {
+                            searchContainer.style.bottom = `${heightDiff + 10}px`;
+                        }
+                    } else {
+                        // Fallback: estimate keyboard height (typically 250-300px on mobile)
+                        searchContainer.style.bottom = '260px';
+                    }
+                }, 300);
+            });
+
+            input.addEventListener('blur', () => {
+                // Reset position when input loses focus
+                setTimeout(() => {
+                    searchContainer.style.bottom = '1rem';
+                }, 100);
+            });
+        }
+
+        async function showEventViewFromId(eventId) {
+            try {
+                // Fetch full event details with organizer and participants
+                const response = await fetch(`/api/destinations/${eventId}`);
+                if (!response.ok) {
+                    alert('Event not found');
+                    return;
+                }
+                const event = await response.json();
+                showEventView(event);
+            } catch (error) {
+                console.error('Error loading event:', error);
+                alert('Error loading event details');
+            }
+        }
+
+        let previousView = 'list'; // Track previous view for back button
+
+        function showEventView(event) {
+            // Store current view before opening event view
+            if (document.getElementById('destinations-list-view').classList.contains('active')) {
+                previousView = 'list';
+            } else if (document.getElementById('destinations-calendar-view').classList.contains('active')) {
+                previousView = 'calendar';
+            }
+            
+            // Open event view side panel
+            const eventPanel = document.getElementById('event-view-panel');
+            eventPanel.classList.add('open');
+            
+            const header = document.getElementById('event-view-header');
+            const details = document.getElementById('event-view-details');
+            const actions = document.getElementById('event-view-actions');
+            
+            // Format date and time
+            const date = new Date(event.scheduled_date);
+            const dateStr = date.toLocaleDateString('en-US', { 
+                weekday: 'long', 
+                year: 'numeric', 
+                month: 'long', 
+                day: 'numeric' 
+            });
+            const timeStr = event.scheduled_time ? event.scheduled_time.substring(0, 5) : 'All day';
+            const status = event.status || 'active';
+            const canCancel = status === 'active';
+            
+            // Format status paragraph
+            let statusParagraph = '';
+            if (status === 'active') {
+                statusParagraph = `Happening on ${dateStr} at ${timeStr}`;
+            } else if (status === 'cancelled') {
+                statusParagraph = `No longer happening. Originally planned for ${dateStr} and ${timeStr}`;
+            } else {
+                statusParagraph = `Past event. Happened on ${dateStr} at ${timeStr}`;
+            }
+            
+            // Generate unique event URL
+            const eventUrl = `${window.location.origin}${window.location.pathname}?event=${event.id}`;
+            const placeType = event.place_type || 'Place';
+            
+            // Get user location from cache for directions
+            let userLocationForDirections = null;
+            const cachedLocation = localStorage.getItem('userLocation');
+            if (cachedLocation) {
+                try {
+                    const loc = JSON.parse(cachedLocation);
+                    userLocationForDirections = `${loc.lat},${loc.lng}`;
+                } catch (e) {
+                    console.error('Error parsing cached location:', e);
+                }
+            }
+            
+            // Create Google Maps directions URL
+            const directionsUrl = userLocationForDirections 
+                ? `https://www.google.com/maps/dir/?api=1&origin=${userLocationForDirections}&destination=${encodeURIComponent(event.address || '')}`
+                : `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(event.address || '')}`;
+            
+            // Set header with rating floating right and type below
+            header.innerHTML = `
+                <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 0.5rem;">
+                    <span>${escapeHtml(event.place_name)}</span>
+                    ${event.rating ? `<span class="rating" style="float: right; margin-left: 0.5rem;">⭐ ${event.rating}</span>` : ''}
+                </div>
+                <div class="event-view-type">${escapeHtml(placeType)}</div>
+            `;
+            
+            // Fetch and display opening hours
+            let hoursDisplay = 'Hours unknown';
+            if (event.place_id && service) {
+                const request = {
+                    placeId: event.place_id,
+                    fields: ['opening_hours']
+                };
+                service.getDetails(request, (place, status) => {
+                    if (status === google.maps.places.PlacesServiceStatus.OK && place && place.opening_hours && place.opening_hours.weekday_text) {
+                        const date = new Date(event.scheduled_date);
+                        const dayOfWeek = date.getDay();
+                        const dayHours = place.opening_hours.weekday_text[dayOfWeek] || place.opening_hours.weekday_text[0];
+                        const hoursEl = document.getElementById('event-hours-display');
+                        if (hoursEl) {
+                            hoursEl.textContent = dayHours;
+                        }
+                    }
+                });
+            }
+            
+            // Add organizer info if not the organizer
+            let organizerInfo = '';
+            if (event.organizer && event.organizer.name) {
+                organizerInfo = `
+                    <div class="event-view-detail-item">
+                        <div class="event-view-detail-label">Organized by</div>
+                        <div>${escapeHtml(event.organizer.name || event.organizer.email || 'Unknown')}</div>
+                    </div>
+                `;
+            }
+            
+            // Set details
+            details.innerHTML = `
+                ${organizerInfo}
+                <div class="event-view-detail-item">
+                    <div class="event-view-detail-label">Address</div>
+                    <div><a href="${directionsUrl}" target="_blank" style="color: #667eea; text-decoration: none;">${escapeHtml(event.address || 'N/A')}</a></div>
+                </div>
+                <div class="event-view-detail-item">
+                    <div class="event-view-detail-label">Hours</div>
+                    <div id="event-hours-display">${hoursDisplay}</div>
+                </div>
+                <div class="event-view-detail-item">
+                    <p style="margin: 0; color: #666; font-size: 0.95rem;">${statusParagraph}</p>
+                </div>
+                ${event.user_id === currentUser?.user_id ? `
+                <div class="event-url-field">
+                    <input type="text" id="event-url-input" value="${eventUrl}" readonly>
+                    <button class="copy-btn" onclick="copyEventUrl('${eventUrl}')">Copy</button>
+                </div>
+                ` : ''}
+            `;
+            
+            // Check if user is organizer
+            const isOrganizer = event.user_id === currentUser?.user_id;
+            
+            // Get user's participation status
+            const userParticipation = event.participants?.find(p => p.user_id === currentUser?.user_id);
+            const participationType = userParticipation?.participation_type;
+            
+            // Set actions
+            let actionButtons = '';
+            
+            if (isOrganizer) {
+                // Organizer actions - show participants list
+                const joinedList = event.joined && event.joined.length > 0 
+                    ? event.joined.map(p => `
+                        <div class="participant-item" onclick="showUserProfile(${p.user?.id || p.user_id})" style="cursor: pointer; padding: 0.75rem; background: #f9f9f9; border-radius: 6px; margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.75rem;">
+                            <div class="participant-avatar" style="width: 40px; height: 40px; border-radius: 50%; background: #667eea; display: flex; align-items: center; justify-content: center; color: white; font-weight: 600;">
+                                ${p.user?.picture_url ? `<img src="${escapeHtml(p.user.picture_url)}" style="width: 100%; height: 100%; border-radius: 50%; object-fit: cover;">` : (p.user?.name || p.user?.email || 'U').charAt(0).toUpperCase()}
+                            </div>
+                            <div style="flex: 1;">
+                                <div style="font-weight: 600; color: #333;">${escapeHtml(p.user?.name || p.user?.email || 'Unknown')}</div>
+                                <div style="font-size: 0.875rem; color: #666;">Joined</div>
+                            </div>
+                        </div>
+                    `).join('')
+                    : '<div style="color: #999; font-size: 0.9rem; padding: 0.5rem;">No one has joined yet</div>';
+                
+                const interestedList = event.interested && event.interested.length > 0
+                    ? event.interested.map(p => `
+                        <div class="participant-item" onclick="showUserProfile(${p.user?.id || p.user_id})" style="cursor: pointer; padding: 0.75rem; background: #f9f9f9; border-radius: 6px; margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.75rem;">
+                            <div class="participant-avatar" style="width: 40px; height: 40px; border-radius: 50%; background: #f39c12; display: flex; align-items: center; justify-content: center; color: white; font-weight: 600;">
+                                ${p.user?.picture_url ? `<img src="${escapeHtml(p.user.picture_url)}" style="width: 100%; height: 100%; border-radius: 50%; object-fit: cover;">` : (p.user?.name || p.user?.email || 'U').charAt(0).toUpperCase()}
+                            </div>
+                            <div style="flex: 1;">
+                                <div style="font-weight: 600; color: #333;">${escapeHtml(p.user?.name || p.user?.email || 'Unknown')}</div>
+                                <div style="font-size: 0.875rem; color: #666;">Interested</div>
+                            </div>
+                        </div>
+                    `).join('')
+                    : '<div style="color: #999; font-size: 0.9rem; padding: 0.5rem;">No one is interested yet</div>';
+                
+                // Add participants section to details
+                details.innerHTML += `
+                    <div class="event-view-detail-item" style="margin-top: 1.5rem; padding-top: 1.5rem; border-top: 2px solid #e0e0e0;">
+                        <div class="event-view-detail-label" style="margin-bottom: 1rem;">Confirmed Attendees (${event.joined_count || 0})</div>
+                        <div>${joinedList}</div>
+                    </div>
+                    <div class="event-view-detail-item" style="margin-top: 1rem;">
+                        <div class="event-view-detail-label" style="margin-bottom: 1rem;">Interested (${event.interested_count || 0})</div>
+                        <div>${interestedList}</div>
+                    </div>
+                `;
+                
+                actionButtons = `
+                    <button class="btn btn-primary" onclick="openInviteOverlay(${event.id}, '${eventUrl.replace(/'/g, "\\'")}')" style="background: #667eea; margin-bottom: 1rem;">Invite via email</button>
+                    ${canCancel ? `<button class="btn btn-primary" onclick="cancelDestination(${event.id}); closeEventView();">Cancel</button>` : ''}
+                    <a href="#" class="delete-link" onclick="deleteDestination(${event.id}); closeEventView(); return false;">Delete</a>
+                `;
+            } else {
+                // Participant actions
+                if (participationType === 'joined') {
+                    actionButtons = `
+                        <button class="btn btn-success" disabled style="margin-bottom: 1rem;">✓ Joined</button>
+                        <button class="btn btn-outline" onclick="removeEventParticipation(${event.id})" style="margin-bottom: 1rem;">Remove</button>
+                    `;
+                } else if (participationType === 'interested') {
+                    actionButtons = `
+                        <button class="btn btn-primary" onclick="joinEvent(${event.id})" style="margin-bottom: 1rem;">Join</button>
+                        <button class="btn btn-outline" onclick="markEventInterested(${event.id})" style="margin-bottom: 1rem;">✓ Interested</button>
+                        <button class="btn btn-secondary" onclick="removeEventParticipation(${event.id})" style="margin-bottom: 1rem;">Remove</button>
+                    `;
+                } else {
+                    // Not participating - show join and interested buttons
+                    actionButtons = `
+                        <button class="btn btn-primary" onclick="joinEvent(${event.id})" style="margin-bottom: 1rem;">Join</button>
+                        <button class="btn btn-outline" onclick="markEventInterested(${event.id})" style="margin-bottom: 1rem;">Interested</button>
+                    `;
+                }
+            }
+            
+            // If interested, show join button in the details section
+            if (!isOrganizer && participationType === 'interested') {
+                details.innerHTML += `
+                    <div class="event-view-detail-item" style="margin-top: 1.5rem; padding-top: 1.5rem; border-top: 2px solid #e0e0e0;">
+                        <div style="background: #fff3cd; padding: 1rem; border-radius: 6px; border-left: 4px solid #f39c12;">
+                            <div style="font-weight: 600; margin-bottom: 0.5rem; color: #856404;">You're interested in this event</div>
+                            <button class="btn btn-primary" onclick="joinEvent(${event.id})" style="background: #28a745; width: 100%;">Join Event</button>
+                        </div>
+                    </div>
+                `;
+            }
+            
+            actions.innerHTML = actionButtons;
+        }
+        
+        // User Profile View Functions
+        let previousViewBeforeProfile = null;
+        
+        async function showUserProfile(userId) {
+            try {
+                // Store current view
+                if (document.getElementById('event-view-panel').classList.contains('open')) {
+                    previousViewBeforeProfile = 'event';
+                } else if (document.getElementById('destinations-panel').classList.contains('open')) {
+                    previousViewBeforeProfile = 'destinations';
+                } else {
+                    previousViewBeforeProfile = null;
+                }
+                
+                const response = await fetch(`/api/users/${userId}`);
+                if (!response.ok) {
+                    alert('User not found');
+                    return;
+                }
+                
+                const user = await response.json();
+                const profilePanel = document.getElementById('user-profile-panel');
+                const profileContent = document.getElementById('user-profile-content');
+                
+                // Format created date
+                const createdDate = new Date(user.created_at);
+                const createdDateStr = createdDate.toLocaleDateString('en-US', { 
+                    year: 'numeric', 
+                    month: 'long', 
+                    day: 'numeric' 
+                });
+                
+                profileContent.innerHTML = `
+                    <div style="text-align: center; margin-bottom: 2rem;">
+                        <div style="width: 100px; height: 100px; border-radius: 50%; background: #667eea; display: inline-flex; align-items: center; justify-content: center; color: white; font-weight: 600; font-size: 2rem; margin-bottom: 1rem;">
+                            ${user.picture_url ? `<img src="${escapeHtml(user.picture_url)}" style="width: 100%; height: 100%; border-radius: 50%; object-fit: cover;">` : (user.name || user.email || 'U').charAt(0).toUpperCase()}
+                        </div>
+                        <h3 style="font-size: 1.5rem; font-weight: 600; color: #333; margin-bottom: 0.5rem;">${escapeHtml(user.name || user.email || 'Unknown User')}</h3>
+                        <p style="color: #666; font-size: 0.9rem;">${escapeHtml(user.email)}</p>
+                    </div>
+                    <div class="event-view-detail-item">
+                        <div class="event-view-detail-label">Email</div>
+                        <div>${escapeHtml(user.email)}</div>
+                    </div>
+                    <div class="event-view-detail-item">
+                        <div class="event-view-detail-label">Member Since</div>
+                        <div>${createdDateStr}</div>
+                    </div>
+                `;
+                
+                profilePanel.classList.add('open');
+            } catch (error) {
+                console.error('Error loading user profile:', error);
+                alert('Error loading user profile');
+            }
+        }
+        
+        function closeUserProfile() {
+            const profilePanel = document.getElementById('user-profile-panel');
+            profilePanel.classList.remove('open');
+            
+            // Return to previous view
+            if (previousViewBeforeProfile === 'event') {
+                // Event view should still be open
+            } else if (previousViewBeforeProfile === 'destinations') {
+                // Destinations panel should still be open
+            }
+            previousViewBeforeProfile = null;
+        }
+
+        function closeEventView() {
+            const eventPanel = document.getElementById('event-view-panel');
+            eventPanel.classList.remove('open');
+            // Return to previous view
+            switchDestinationsView(previousView);
+        }
+
+        async function loadDestinationsForCalendar(year, month) {
+            try {
+                const response = await fetch('/api/destinations');
+                const destinations = await response.json();
+                return destinations.filter(d => {
+                    const eventDate = new Date(d.scheduled_date);
+                    return eventDate.getFullYear() === year && eventDate.getMonth() + 1 === month;
+                });
+            } catch (error) {
+                console.error('Error loading destinations for calendar:', error);
+                return [];
+            }
+        }
+
+        // Form submission
+        document.getElementById('destination-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            if (!requireAuth(() => true)) return;
+
+            if (!selectedPlace) {
+                alert('Please select a place first');
+                return;
+            }
+
+            const date = document.getElementById('destination-date').value;
+            const timeInput = document.getElementById('destination-time');
+            const time = timeInput.value || null; // null if time not provided (all-day event)
+
+            // Validate that date is not in the past
+            const selectedDate = new Date(date);
+            const now = new Date();
+            now.setHours(0, 0, 0, 0); // Reset to start of day for comparison
+            
+            if (selectedDate < now) {
+                alert('Please select a future date');
+                return;
+            }
+            
+            // If time is provided, validate it's not in the past
+            if (time) {
+                const selectedDateTime = new Date(`${date}T${time}`);
+                if (selectedDateTime < new Date()) {
+                    alert('Please select a future date and time');
+                    return;
+                }
+                
+                // Validate time is within opening hours
+                if (selectedPlace.opening_hours && selectedPlace.opening_hours.weekday_text) {
+                    const selectedDate = new Date(date);
+                    const dayOfWeek = selectedDate.getDay();
+                    const hoursText = selectedPlace.opening_hours.weekday_text[dayOfWeek];
+                    
+                    if (hoursText && hoursText.toLowerCase().includes('closed')) {
+                        alert('This business is closed on the selected date. Please choose a different date.');
+                        return;
+                    }
+                    
+                    if (hoursText) {
+                        const timeRange = parseHoursText(hoursText);
+                        if (timeRange) {
+                            const [selectedHour, selectedMin] = time.split(':').map(Number);
+                            const [startHour, startMin] = timeRange.start.split(':').map(Number);
+                            const [endHour, endMin] = timeRange.end.split(':').map(Number);
+                            
+                            const selectedTimeMinutes = selectedHour * 60 + selectedMin;
+                            const startTimeMinutes = startHour * 60 + startMin;
+                            const endTimeMinutes = endHour * 60 + endMin;
+                            
+                            if (selectedTimeMinutes < startTimeMinutes || selectedTimeMinutes > endTimeMinutes) {
+                                alert(`The selected time is outside of business hours (${timeRange.start} - ${timeRange.end}). Please select a time within the opening hours.`);
+                                return;
+                            }
+                        }
+                    }
+                }
+            }
+
+            const destinationData = {
+                place_name: selectedPlace.place_name,
+                address: selectedPlace.address,
+                latitude: selectedPlace.latitude,
+                longitude: selectedPlace.longitude,
+                rating: selectedPlace.rating,
+                place_id: selectedPlace.place_id,
+                place_type: selectedPlace.place_type || 'Place',
+                scheduled_date: date,
+                scheduled_time: time
+            };
+
+            try {
+                const response = await fetch('/api/destinations', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(destinationData)
+                });
+
+                if (response.ok) {
+                    const savedDestination = await response.json();
+                    const savedEvent = Array.isArray(savedDestination) ? savedDestination[0] : savedDestination;
+                    
+                    // If there are invite emails, send them now that event is created
+                    if (inviteEmails.length > 0 && savedEvent && savedEvent.id) {
+                        const eventUrl = `${window.location.origin}${window.location.pathname}?event=${savedEvent.id}`;
+                        // TODO: Send invites via backend API
+                        // For now, show a message
+                        alert(`Event created successfully! Invites will be sent to ${inviteEmails.length} email address(es) once the email service is configured.`);
+                        inviteEmails = []; // Clear after sending
+                    } else {
+                        alert('Event created successfully!');
+                    }
+                    closeSidePanel();
+                } else {
+                    const error = await response.json();
+                    alert('Error saving destination: ' + (error.error || 'Unknown error'));
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Error saving destination. Please try again.');
+            }
+        });
+
+        // Load destinations list with status
+        async function loadDestinationsList() {
+            const listContainer = document.getElementById('destinations-list-container');
+            listContainer.innerHTML = '<div class="loading">Loading destinations...</div>';
+
+            try {
+                const response = await fetch('/api/destinations');
+                const destinations = await response.json();
+
+                if (destinations.length === 0) {
+                    listContainer.innerHTML = '<div class="loading">No destinations yet. Create one by clicking "Go here" on a place!</div>';
+                    return;
+                }
+
+                // Calculate status for each destination and sort by next event
+                const now = new Date();
+                const destinationsWithStatus = destinations.map(dest => {
+                    // Handle optional scheduled_time
+                    const timeStr = dest.scheduled_time || '12:00:00'; // Default to noon for all-day events
+                    const scheduledDateTime = new Date(`${dest.scheduled_date}T${timeStr}`);
+                    let status = dest.status || 'active';
+                    
+                    // Auto-update status: if past and not cancelled, mark as past
+                    if (status !== 'cancelled' && scheduledDateTime < now) {
+                        status = 'past';
+                    } else if (status === 'active' && scheduledDateTime >= now) {
+                        status = 'active';
+                    }
+                    
+                    return { ...dest, calculatedStatus: status, scheduledDateTime };
+                });
+
+                // Sort by next event happening (future events first, then past, then cancelled)
+                destinationsWithStatus.sort((a, b) => {
+                    // Future events first
+                    if (a.calculatedStatus === 'active' && b.calculatedStatus === 'active') {
+                        return a.scheduledDateTime - b.scheduledDateTime;
+                    }
+                    if (a.calculatedStatus === 'active') return -1;
+                    if (b.calculatedStatus === 'active') return 1;
+                    
+                    // Then past events
+                    if (a.calculatedStatus === 'past' && b.calculatedStatus === 'past') {
+                        return b.scheduledDateTime - a.scheduledDateTime; // Most recent past first
+                    }
+                    if (a.calculatedStatus === 'past') return -1;
+                    if (b.calculatedStatus === 'past') return 1;
+                    
+                    // Cancelled last
+                    return a.scheduledDateTime - b.scheduledDateTime;
+                });
+
+                // Group destinations by date
+                const groupedByDate = {};
+                destinationsWithStatus.forEach(dest => {
+                    const dateKey = dest.scheduled_date;
+                    if (!groupedByDate[dateKey]) {
+                        groupedByDate[dateKey] = [];
+                    }
+                    groupedByDate[dateKey].push(dest);
+                });
+
+                // Sort date keys (most recent first for past, earliest first for future)
+                const sortedDates = Object.keys(groupedByDate).sort((a, b) => {
+                    const dateA = new Date(a);
+                    const dateB = new Date(b);
+                    const now = new Date();
+                    now.setHours(0, 0, 0, 0);
+                    
+                    // Future dates first (ascending), then past dates (descending)
+                    if (dateA >= now && dateB >= now) {
+                        return dateA - dateB;
+                    } else if (dateA < now && dateB < now) {
+                        return dateB - dateA;
+                    } else {
+                        return dateA >= now ? -1 : 1;
+                    }
+                });
+
+                // Build HTML with day separators
+                listContainer.innerHTML = sortedDates.map(dateKey => {
+                    const date = new Date(dateKey);
+                    const dateStr = date.toLocaleDateString('en-US', { 
+                        weekday: 'long', 
+                        year: 'numeric', 
+                        month: 'long', 
+                        day: 'numeric' 
+                    });
+                    
+                    const dayDestinations = groupedByDate[dateKey];
+                    
+                    return `
+                        <div class="day-separator">
+                            <div class="day-separator-line"></div>
+                            <div class="day-separator-text">${dateStr}</div>
+                            <div class="day-separator-line"></div>
+                        </div>
+                        ${dayDestinations.map(dest => {
+                            const timeStr = dest.scheduled_time ? dest.scheduled_time.substring(0, 5) : 'All day';
+                            const status = dest.calculatedStatus;
+                            const statusClass = `status-${status}`;
+                            const statusLabel = status.charAt(0).toUpperCase() + status.slice(1);
+                            const placeType = dest.place_type || 'Place';
+                            const organizerName = dest.organizer_name || (dest.is_organizer ? 'You' : 'Unknown');
+                            const participationBadge = dest.participation_type ? `<span style="font-size: 0.75rem; color: #667eea; margin-left: 0.5rem;">(${dest.participation_type === 'joined' ? 'Joined' : 'Interested'})</span>` : '';
+
+                            return `
+                                <div class="destination-item" style="cursor: pointer;" onclick="showEventViewFromId(${dest.id})">
+                                    <div class="destination-item-header">
+                                        <div style="flex: 1;">
+                                            <div class="destination-name" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.25rem;">
+                                                <span>${escapeHtml(dest.place_name)}${participationBadge}</span>
+                                                <span class="destination-status ${statusClass}" style="float: right;">${statusLabel}</span>
+                                            </div>
+                                            <div style="font-size: 0.875rem; color: #666; margin-bottom: 0.25rem;">${escapeHtml(placeType)}</div>
+                                            <div style="font-size: 0.875rem; color: #666; margin-bottom: 0.25rem;">${escapeHtml(organizerName)}</div>
+                                            <div style="font-size: 0.875rem; color: #666;">${timeStr}</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            `;
+                        }).join('')}
+                    `;
+                }).join('');
+            } catch (error) {
+                console.error('Error loading destinations:', error);
+                listContainer.innerHTML = '<div class="error">Error loading destinations. Please try again.</div>';
+            }
+        }
+
+        // Cancel destination
+        async function cancelDestination(id) {
+            if (!confirm('Are you sure you want to cancel this destination?')) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/destinations/${id}/cancel`, {
+                    method: 'PATCH'
+                });
+
+                if (response.ok) {
+                    alert('Destination cancelled successfully!');
+                    // Refresh views
+                    loadDestinationsList();
+                    if (document.getElementById('destinations-calendar-view').classList.contains('active')) {
+                        renderCalendar();
+                    }
+                    // If event view is open, refresh it
+                    if (document.getElementById('event-view-panel').classList.contains('open')) {
+                        showEventViewFromId(id);
+                    }
+                } else {
+                    const error = await response.json();
+                    alert('Error cancelling destination: ' + (error.error || 'Unknown error'));
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Error cancelling destination. Please try again.');
+            }
+        }
+
+        // Delete destination
+        async function deleteDestination(id) {
+            if (!confirm('Are you sure you want to delete this destination? This action cannot be undone.')) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/destinations/${id}`, {
+                    method: 'DELETE'
+                });
+
+                if (response.ok) {
+                    alert('Destination deleted successfully!');
+                    // Close event view if open
+                    if (document.getElementById('event-view-panel').classList.contains('open')) {
+                        closeEventView();
+                    }
+                    // Refresh views
+                    loadDestinationsList();
+                    if (document.getElementById('destinations-calendar-view').classList.contains('active')) {
+                        renderCalendar();
+                    }
+                } else {
+                    const error = await response.json();
+                    alert('Error deleting destination: ' + (error.error || 'Unknown error'));
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Error deleting destination. Please try again.');
+            }
+        }
+
+        // Helper function to escape HTML
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // Event participation functions
+        async function joinEvent(eventId) {
+            try {
+                const response = await fetch(`/api/events/${eventId}/participate`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ type: 'joined' })
+                });
+                if (response.ok) {
+                    // Refresh event view
+                    await showEventViewFromId(eventId);
+                    // Refresh destinations list
+                    loadDestinationsList();
+                    if (document.getElementById('destinations-calendar-view').classList.contains('active')) {
+                        renderCalendar();
+                    }
+                } else {
+                    alert('Error joining event');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Error joining event');
+            }
+        }
+
+        async function markEventInterested(eventId) {
+            try {
+                const response = await fetch(`/api/events/${eventId}/participate`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ type: 'interested' })
+                });
+                if (response.ok) {
+                    // Refresh event view
+                    await showEventViewFromId(eventId);
+                    // Refresh destinations list
+                    loadDestinationsList();
+                    if (document.getElementById('destinations-calendar-view').classList.contains('active')) {
+                        renderCalendar();
+                    }
+                } else {
+                    alert('Error marking interest');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Error marking interest');
+            }
+        }
+
+        async function removeEventParticipation(eventId) {
+            if (!confirm('Remove your participation from this event?')) return;
+            try {
+                const response = await fetch(`/api/events/${eventId}/participate`, {
+                    method: 'DELETE'
+                });
+                if (response.ok) {
+                    // Refresh event view
+                    await showEventViewFromId(eventId);
+                    // Refresh destinations list
+                    loadDestinationsList();
+                    if (document.getElementById('destinations-calendar-view').classList.contains('active')) {
+                        renderCalendar();
+                    }
+                } else {
+                    alert('Error removing participation');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Error removing participation');
+            }
+        }
+
+        // Make functions globally accessible
+        window.openSidePanel = openSidePanel;
+        window.closeSidePanel = closeSidePanel;
+        window.openDestinationsPanel = openDestinationsPanel;
+        window.closeDestinationsPanel = closeDestinationsPanel;
+        window.switchDestinationsView = switchDestinationsView;
+        window.navigateCalendar = navigateCalendar;
+        window.centerOnUserLocation = centerOnUserLocation;
+        window.toggleTimeSection = toggleTimeSection;
+        window.toggleInviteSection = toggleInviteSection;
+        window.scrollToCalendar = scrollToCalendar;
+        window.scrollToTop = scrollToTop;
+        window.showEventViewFromId = showEventViewFromId;
+        window.showEventView = showEventView;
+        window.closeEventView = closeEventView;
+        window.cancelDestination = cancelDestination;
+        window.deleteDestination = deleteDestination;
+        window.login = login;
+        window.logout = logout;
+        window.joinEvent = joinEvent;
+        window.markEventInterested = markEventInterested;
+        window.removeEventParticipation = removeEventParticipation;
+        window.showUserProfile = showUserProfile;
+        window.closeUserProfile = closeUserProfile;
+
+        // Invite overlay functions
+        let inviteEmails = [];
+        let currentEventId = null;
+        let currentEventUrl = '';
+
+        function openInviteOverlay(eventId, eventUrl) {
+            currentEventId = eventId;
+            currentEventUrl = eventUrl;
+            inviteEmails = [];
+            const emailInput = document.getElementById('invite-email-input');
+            emailInput.value = '';
+            emailInput.classList.remove('invalid');
+            // Add blur event listener to add email when input loses focus
+            emailInput.addEventListener('blur', addEmail);
+            updateInviteEmailsList();
+            updateInviteMessage();
+            document.getElementById('invite-overlay').classList.add('open');
+            // Focus on textarea
+            setTimeout(() => {
+                const textarea = document.getElementById('invite-message-text');
+                if (textarea) textarea.focus();
+            }, 100);
+        }
+
+        function closeInviteOverlay() {
+            document.getElementById('invite-overlay').classList.remove('open');
+            // Don't clear inviteEmails if it's for a new event (they'll be sent after event creation)
+            if (currentEventId) {
+                inviteEmails = [];
+            }
+            currentEventId = null;
+            currentEventUrl = '';
+        }
+
+        function openInviteOverlayForNewEvent() {
+            currentEventId = null;
+            currentEventUrl = ''; // No URL yet - will be created after event is saved
+            // Keep existing inviteEmails if any were added before
+            const emailInput = document.getElementById('invite-email-input');
+            emailInput.value = '';
+            emailInput.classList.remove('invalid');
+            // Add blur event listener to add email when input loses focus
+            emailInput.addEventListener('blur', addEmail);
+            updateInviteEmailsList();
+            updateInviteMessage();
+            document.getElementById('invite-overlay').classList.add('open');
+            // Focus on textarea
+            setTimeout(() => {
+                const textarea = document.getElementById('invite-message-text');
+                if (textarea) textarea.focus();
+            }, 100);
+        }
+
+        function handleEmailInputKeypress(event) {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                addEmail();
+            }
+        }
+
+        function addEmail() {
+            const input = document.getElementById('invite-email-input');
+            const email = input.value.trim();
+            
+            if (!email) return;
+            
+            // Validate email
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            if (!emailRegex.test(email)) {
+                input.classList.add('invalid');
+                return;
+            }
+            
+            // Check if email already exists
+            if (inviteEmails.includes(email)) {
+                input.classList.add('invalid');
+                return;
+            }
+            
+            input.classList.remove('invalid');
+            inviteEmails.push(email);
+            input.value = '';
+            updateInviteEmailsList();
+            updateInviteMessage();
+        }
+
+        function removeEmail(email) {
+            inviteEmails = inviteEmails.filter(e => e !== email);
+            updateInviteEmailsList();
+            updateInviteMessage();
+        }
+
+        function updateInviteEmailsList() {
+            const listEl = document.getElementById('invite-emails-list');
+            if (inviteEmails.length === 0) {
+                listEl.innerHTML = '';
+                return;
+            }
+            
+            listEl.innerHTML = inviteEmails.map(email => `
+                <div class="email-row">
+                    <span>${escapeHtml(email)}</span>
+                    <button onclick="removeEmail('${email.replace(/'/g, "\\'")}')">&times;</button>
+                </div>
+            `).join('');
+        }
+
+        function updateInviteMessage() {
+            const messageTextarea = document.getElementById('invite-message-text');
+            if (!messageTextarea) return;
+            
+            if (currentEventUrl) {
+                // Existing event - has URL
+                const defaultMessage = `You're invited to join me! Check out the event details: ${currentEventUrl}`;
+                if (!messageTextarea.value || messageTextarea.value.trim() === '') {
+                    messageTextarea.value = defaultMessage;
+                }
+            } else {
+                // New event - URL will be created after event is saved
+                const defaultMessage = `You're invited to join me! Once the event is created, you'll receive a link with all the details.`;
+                if (!messageTextarea.value || messageTextarea.value.trim() === '') {
+                    messageTextarea.value = defaultMessage;
+                }
+            }
+        }
+
+        function copyEventUrl(url) {
+            navigator.clipboard.writeText(url).then(() => {
+                const btn = event.target;
+                const originalText = btn.textContent;
+                btn.textContent = 'Copied!';
+                setTimeout(() => {
+                    btn.textContent = originalText;
+                }, 2000);
+            }).catch(err => {
+                console.error('Failed to copy:', err);
+                alert('Failed to copy URL. Please copy manually.');
+            });
+        }
+
+        function sendInvites() {
+            if (inviteEmails.length === 0) {
+                alert('Please add at least one email address');
+                return;
+            }
+            
+            const messageTextarea = document.getElementById('invite-message-text');
+            const inviteMessage = messageTextarea ? messageTextarea.value.trim() : '';
+            
+            if (!inviteMessage) {
+                alert('Please enter an invite message');
+                return;
+            }
+            
+            // TODO: Implement actual email sending via backend
+            // For now, just show a success message
+            alert(`Invites will be sent to ${inviteEmails.length} email address(es) with the message:\n\n${inviteMessage}\n\nThis feature will be implemented with a backend email service.`);
+            closeInviteOverlay();
+        }
+
+        // Make functions globally accessible
+        window.openInviteOverlay = openInviteOverlay;
+        window.openInviteOverlayForNewEvent = openInviteOverlayForNewEvent;
+        window.closeInviteOverlay = closeInviteOverlay;
+        window.handleEmailInputKeypress = handleEmailInputKeypress;
+        window.removeEmail = removeEmail;
+        window.copyEventUrl = copyEventUrl;
+        window.sendInvites = sendInvites;
+    </script>
+
+    <!-- Google Maps API script -->
+    <script 
+        src="https://maps.googleapis.com/maps/api/js?key={{ google_maps_api_key }}&libraries=places&callback=initMap"
+        async 
+        defer
+    ></script>
+</body>
+</html>
+

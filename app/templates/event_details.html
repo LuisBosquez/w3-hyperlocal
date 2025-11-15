@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Event Details</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: #f5f5f5;
+            min-height: 100vh;
+            padding: 2rem;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+            padding: 2rem;
+        }
+
+        .header {
+            margin-bottom: 2rem;
+            padding-bottom: 1.5rem;
+            border-bottom: 2px solid #e0e0e0;
+        }
+
+        .header h1 {
+            font-size: 2rem;
+            color: #333;
+            margin-bottom: 0.5rem;
+        }
+
+        .organizer-info {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+
+        .organizer-avatar {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            background: #667eea;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: 600;
+            font-size: 1.2rem;
+        }
+
+        .organizer-avatar img {
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            object-fit: cover;
+        }
+
+        .organizer-details h3 {
+            font-size: 1rem;
+            color: #666;
+            margin-bottom: 0.25rem;
+        }
+
+        .organizer-details p {
+            font-size: 0.9rem;
+            color: #999;
+        }
+
+        .event-details {
+            margin-bottom: 2rem;
+        }
+
+        .detail-item {
+            margin-bottom: 1.5rem;
+        }
+
+        .detail-label {
+            font-weight: 600;
+            color: #666;
+            margin-bottom: 0.5rem;
+            font-size: 0.9rem;
+        }
+
+        .detail-value {
+            font-size: 1.1rem;
+            color: #333;
+        }
+
+        .detail-value a {
+            color: #667eea;
+            text-decoration: none;
+        }
+
+        .detail-value a:hover {
+            text-decoration: underline;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 0.25rem 0.75rem;
+            border-radius: 20px;
+            font-size: 0.875rem;
+            font-weight: 600;
+            margin-left: 0.5rem;
+        }
+
+        .status-active {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .status-cancelled {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .status-past {
+            background: #e2e3e5;
+            color: #383d41;
+        }
+
+        .action-section {
+            margin-top: 2rem;
+            padding-top: 2rem;
+            border-top: 2px solid #e0e0e0;
+        }
+
+        .auth-prompt {
+            background: #f8f9fa;
+            padding: 1.5rem;
+            border-radius: 8px;
+            text-align: center;
+        }
+
+        .auth-prompt h2 {
+            font-size: 1.5rem;
+            margin-bottom: 1rem;
+            color: #333;
+        }
+
+        .auth-prompt p {
+            color: #666;
+            margin-bottom: 1.5rem;
+        }
+
+        .btn {
+            padding: 0.75rem 2rem;
+            border: none;
+            border-radius: 6px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-decoration: none;
+            display: inline-block;
+        }
+
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #5568d3;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-secondary {
+            background: #6c757d;
+            color: white;
+            margin-left: 1rem;
+        }
+
+        .btn-secondary:hover {
+            background: #5a6268;
+        }
+
+        .btn-success {
+            background: #28a745;
+            color: white;
+        }
+
+        .btn-success:hover {
+            background: #218838;
+        }
+
+        .btn-outline {
+            background: transparent;
+            border: 2px solid #667eea;
+            color: #667eea;
+        }
+
+        .btn-outline:hover {
+            background: #667eea;
+            color: white;
+        }
+
+        .participant-actions {
+            display: flex;
+            gap: 1rem;
+            flex-wrap: wrap;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 2rem;
+            color: #666;
+        }
+
+        .error {
+            text-align: center;
+            padding: 2rem;
+            color: #dc3545;
+        }
+
+        @media (max-width: 768px) {
+            body {
+                padding: 1rem;
+            }
+
+            .container {
+                padding: 1.5rem;
+            }
+
+            .header h1 {
+                font-size: 1.5rem;
+            }
+
+            .participant-actions {
+                flex-direction: column;
+            }
+
+            .btn {
+                width: 100%;
+                margin-left: 0 !important;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div id="loading" class="loading">Loading event details...</div>
+        <div id="content" style="display: none;">
+            <div class="header">
+                <h1 id="event-name"></h1>
+                <div class="organizer-info" id="organizer-info"></div>
+            </div>
+
+            <div class="event-details" id="event-details"></div>
+
+            <div class="action-section" id="action-section"></div>
+        </div>
+        <div id="error" class="error" style="display: none;"></div>
+    </div>
+
+    <script>
+        const eventId = {{ event_id }};
+        let currentUser = null;
+
+        // Check authentication status
+        async function checkAuth() {
+            try {
+                const response = await fetch('/api/auth/status');
+                const data = await response.json();
+                if (data.authenticated) {
+                    currentUser = data;
+                }
+            } catch (error) {
+                console.error('Error checking auth:', error);
+            }
+        }
+
+        // Load event details
+        async function loadEventDetails() {
+            try {
+                const response = await fetch(`/api/destinations/${eventId}`);
+                if (!response.ok) {
+                    throw new Error('Event not found');
+                }
+                const event = await response.json();
+                displayEvent(event);
+            } catch (error) {
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('error').style.display = 'block';
+                document.getElementById('error').textContent = 'Event not found or error loading event details.';
+            }
+        }
+
+        function displayEvent(event) {
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('content').style.display = 'block';
+
+            // Event name
+            document.getElementById('event-name').innerHTML = `
+                ${escapeHtml(event.place_name)}
+                <span class="status-badge status-${event.status || 'active'}">${(event.status || 'active').charAt(0).toUpperCase() + (event.status || 'active').slice(1)}</span>
+            `;
+
+            // Organizer info
+            const organizerInfo = document.getElementById('organizer-info');
+            if (event.organizer) {
+                organizerInfo.innerHTML = `
+                    <div class="organizer-avatar">
+                        ${event.organizer.picture_url 
+                            ? `<img src="${escapeHtml(event.organizer.picture_url)}" alt="Organizer">`
+                            : (event.organizer.name || event.organizer.email || 'U').charAt(0).toUpperCase()}
+                    </div>
+                    <div class="organizer-details">
+                        <h3>Organized by</h3>
+                        <p>${escapeHtml(event.organizer.name || event.organizer.email || 'Unknown')}</p>
+                    </div>
+                `;
+            }
+
+            // Event details
+            const date = new Date(event.scheduled_date);
+            const dateStr = date.toLocaleDateString('en-US', { 
+                weekday: 'long', 
+                year: 'numeric', 
+                month: 'long', 
+                day: 'numeric' 
+            });
+            const timeStr = event.scheduled_time ? event.scheduled_time.substring(0, 5) : 'All day';
+
+            const details = document.getElementById('event-details');
+            details.innerHTML = `
+                <div class="detail-item">
+                    <div class="detail-label">Date & Time</div>
+                    <div class="detail-value">${dateStr} at ${timeStr}</div>
+                </div>
+                <div class="detail-item">
+                    <div class="detail-label">Address</div>
+                    <div class="detail-value">
+                        <a href="https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(event.address || '')}" target="_blank">
+                            ${escapeHtml(event.address || 'N/A')}
+                        </a>
+                    </div>
+                </div>
+                ${event.place_type ? `
+                <div class="detail-item">
+                    <div class="detail-label">Type</div>
+                    <div class="detail-value">${escapeHtml(event.place_type)}</div>
+                </div>
+                ` : ''}
+                ${event.joined_count !== undefined ? `
+                <div class="detail-item">
+                    <div class="detail-label">Participants</div>
+                    <div class="detail-value">${event.joined_count} ${event.joined_count === 1 ? 'person' : 'people'} joined</div>
+                </div>
+                ` : ''}
+            `;
+
+            // Action section
+            const actionSection = document.getElementById('action-section');
+            if (currentUser) {
+                // User is authenticated - show join/interested buttons
+                const userParticipation = event.participants?.find(p => p.user_id === currentUser.user_id);
+                const participationType = userParticipation?.participation_type;
+
+                if (participationType === 'joined') {
+                    actionSection.innerHTML = `
+                        <div class="participant-actions">
+                            <button class="btn btn-success" disabled>✓ Joined</button>
+                            <button class="btn btn-outline" onclick="removeParticipation()">Remove</button>
+                        </div>
+                    `;
+                } else if (participationType === 'interested') {
+                    actionSection.innerHTML = `
+                        <div class="participant-actions">
+                            <button class="btn btn-primary" onclick="joinEvent()">Join</button>
+                            <button class="btn btn-outline" onclick="markInterested()">✓ Interested</button>
+                            <button class="btn btn-secondary" onclick="removeParticipation()">Remove</button>
+                        </div>
+                    `;
+                } else {
+                    actionSection.innerHTML = `
+                        <div class="participant-actions">
+                            <button class="btn btn-primary" onclick="joinEvent()">Join</button>
+                            <button class="btn btn-outline" onclick="markInterested()">Interested</button>
+                        </div>
+                    `;
+                }
+            } else {
+                // User is not authenticated - show sign in prompt
+                const redirectUrl = encodeURIComponent(window.location.href);
+                actionSection.innerHTML = `
+                    <div class="auth-prompt">
+                        <h2>Sign in to join this event</h2>
+                        <p>You need to sign in with Google to join or mark yourself as interested in this event.</p>
+                        <a href="/auth/google?redirect=${redirectUrl}" class="btn btn-primary">Sign in with Google</a>
+                    </div>
+                `;
+            }
+        }
+
+        async function joinEvent() {
+            try {
+                const response = await fetch(`/api/events/${eventId}/participate`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ type: 'joined' })
+                });
+                if (response.ok) {
+                    loadEventDetails();
+                } else {
+                    alert('Error joining event');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Error joining event');
+            }
+        }
+
+        async function markInterested() {
+            try {
+                const response = await fetch(`/api/events/${eventId}/participate`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ type: 'interested' })
+                });
+                if (response.ok) {
+                    loadEventDetails();
+                } else {
+                    alert('Error marking interest');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Error marking interest');
+            }
+        }
+
+        async function removeParticipation() {
+            if (!confirm('Remove your participation from this event?')) return;
+            try {
+                const response = await fetch(`/api/events/${eventId}/participate`, {
+                    method: 'DELETE'
+                });
+                if (response.ok) {
+                    loadEventDetails();
+                } else {
+                    alert('Error removing participation');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Error removing participation');
+            }
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // Initialize
+        (async () => {
+            await checkAuth();
+            await loadEventDetails();
+        })();
+    </script>
+</body>
+</html>
+
