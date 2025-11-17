@@ -41,7 +41,7 @@ CREATE INDEX IF NOT EXISTS idx_users_google_id ON users(google_id);
 
 -- Destinations table for saving user destinations/events
 CREATE TABLE destinations (
-  id BIGSERIAL PRIMARY KEY,
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id BIGINT REFERENCES users(id) ON DELETE CASCADE,
   place_name TEXT NOT NULL,
   address TEXT,
@@ -59,7 +59,7 @@ CREATE TABLE destinations (
 -- Event participants table (for join/interested functionality)
 CREATE TABLE event_participants (
   id BIGSERIAL PRIMARY KEY,
-  event_id BIGINT REFERENCES destinations(id) ON DELETE CASCADE,
+  event_id UUID REFERENCES destinations(id) ON DELETE CASCADE,
   user_id BIGINT REFERENCES users(id) ON DELETE CASCADE,
   participation_type TEXT NOT NULL CHECK (participation_type IN ('joined', 'interested')),
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
@@ -105,18 +105,18 @@ BEGIN
     SELECT id INTO user1_id FROM users WHERE google_id = 'test_google_id_1' LIMIT 1;
     SELECT id INTO user2_id FROM users WHERE google_id = 'test_google_id_2' LIMIT 1;
     
-    -- Insert test destinations only if users exist
+    -- Insert test destinations only if users exist (UUIDs will be auto-generated)
     IF user1_id IS NOT NULL THEN
-        INSERT INTO destinations (user_id, place_name, address, latitude, longitude, place_id, place_type, rating, scheduled_date, scheduled_time, status) VALUES
-        (user1_id, 'Test Coffee Shop', '123 Main St, Test City, TC 12345', 40.7128, -74.0060, 'test_place_id_1', 'Cafe', 4.5, CURRENT_DATE + INTERVAL '3 days', '14:00:00', 'active'),
-        (user1_id, 'Test Restaurant', '456 Oak Ave, Test City, TC 12345', 40.7580, -73.9855, 'test_place_id_2', 'Restaurant', 4.2, CURRENT_DATE + INTERVAL '7 days', '19:30:00', 'active'),
-        (user1_id, 'Test Park', '789 Park Blvd, Test City, TC 12345', 40.7829, -73.9654, 'test_place_id_3', 'Park', 4.8, CURRENT_DATE - INTERVAL '2 days', NULL, 'past')
+        INSERT INTO destinations (id, user_id, place_name, address, latitude, longitude, place_id, place_type, rating, scheduled_date, scheduled_time, status) VALUES
+        (gen_random_uuid(), user1_id, 'Test Coffee Shop', '123 Main St, Test City, TC 12345', 40.7128, -74.0060, 'test_place_id_1', 'Cafe', 4.5, CURRENT_DATE + INTERVAL '3 days', '14:00:00', 'active'),
+        (gen_random_uuid(), user1_id, 'Test Restaurant', '456 Oak Ave, Test City, TC 12345', 40.7580, -73.9855, 'test_place_id_2', 'Restaurant', 4.2, CURRENT_DATE + INTERVAL '7 days', '19:30:00', 'active'),
+        (gen_random_uuid(), user1_id, 'Test Park', '789 Park Blvd, Test City, TC 12345', 40.7829, -73.9654, 'test_place_id_3', 'Park', 4.8, CURRENT_DATE - INTERVAL '2 days', NULL, 'past')
         ON CONFLICT DO NOTHING;
     END IF;
     
     IF user2_id IS NOT NULL THEN
-        INSERT INTO destinations (user_id, place_name, address, latitude, longitude, place_id, place_type, rating, scheduled_date, scheduled_time, status) VALUES
-        (user2_id, 'Test Coffee Shop', '123 Main St, Test City, TC 12345', 40.7128, -74.0060, 'test_place_id_1', 'Cafe', 4.5, CURRENT_DATE + INTERVAL '5 days', '10:00:00', 'active')
+        INSERT INTO destinations (id, user_id, place_name, address, latitude, longitude, place_id, place_type, rating, scheduled_date, scheduled_time, status) VALUES
+        (gen_random_uuid(), user2_id, 'Test Coffee Shop', '123 Main St, Test City, TC 12345', 40.7128, -74.0060, 'test_place_id_1', 'Cafe', 4.5, CURRENT_DATE + INTERVAL '5 days', '10:00:00', 'active')
         ON CONFLICT DO NOTHING;
     END IF;
 END $$;
@@ -128,8 +128,8 @@ DECLARE
     user1_id BIGINT;
     user2_id BIGINT;
     user3_id BIGINT;
-    event1_id BIGINT;
-    event2_id BIGINT;
+    event1_id UUID;
+    event2_id UUID;
 BEGIN
     -- Get user IDs
     SELECT id INTO user1_id FROM users WHERE google_id = 'test_google_id_1' LIMIT 1;

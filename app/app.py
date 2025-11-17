@@ -46,7 +46,7 @@ def index():
     return render_template('index.html', google_maps_api_key=google_maps_api_key)
 
 
-@app.route('/event/<int:event_id>')
+@app.route('/event/<event_id>')
 def event_details(event_id):
     """Render event details page for URL-based access."""
     google_maps_api_key = os.getenv('GOOGLE_MAPS_API_KEY', '')
@@ -110,6 +110,14 @@ def google_callback():
             if user_check.data:
                 user = user_check.data[0]
                 user_id = user['id']
+                # Update user info in case it changed (name, email, picture)
+                # This ensures the database always has the latest info from Google
+                update_response = supabase.table('users').update({
+                    'email': user_info['email'],
+                    'name': user_info.get('name'),
+                    'picture_url': user_info.get('picture')
+                }).eq('id', user_id).execute()
+                print(f"Updated user {user_id}: name={user_info.get('name')}, email={user_info['email']}")
             else:
                 # Create new user
                 new_user = supabase.table('users').insert({
@@ -119,12 +127,16 @@ def google_callback():
                     'picture_url': user_info.get('picture')
                 }).execute()
                 user_id = new_user.data[0]['id']
+                print(f"Created new user {user_id}: name={user_info.get('name')}, email={user_info['email']}, google_id={user_info['id']}")
             
             # Store in session
             session['user_id'] = user_id
             session['user_email'] = user_info['email']
             session['user_name'] = user_info.get('name')
             session['user_picture'] = user_info.get('picture')
+            
+            # Debug: Log the user info
+            print(f"User authenticated: user_id={user_id}, email={user_info['email']}, name={user_info.get('name')}")
         
         # Redirect back to the page they came from or home
         redirect_url = request.args.get('redirect', '/')
@@ -145,13 +157,47 @@ def logout():
 def auth_status():
     """Get current authentication status."""
     if 'user_id' in session:
-        return jsonify({
-            'authenticated': True,
-            'user_id': session['user_id'],
-            'email': session.get('user_email'),
-            'name': session.get('user_name'),
-            'picture': session.get('user_picture')
-        })
+        # Verify user still exists in database and get fresh info
+        user_id = session['user_id']
+        if supabase:
+            try:
+                user_check = supabase.table('users').select('id, email, name, picture_url').eq('id', user_id).execute()
+                if user_check.data and len(user_check.data) > 0:
+                    user_data = user_check.data[0]
+                    # Update session with fresh data
+                    session['user_email'] = user_data.get('email')
+                    session['user_name'] = user_data.get('name')
+                    session['user_picture'] = user_data.get('picture_url')
+                    return jsonify({
+                        'authenticated': True,
+                        'user_id': user_id,
+                        'email': user_data.get('email'),
+                        'name': user_data.get('name'),
+                        'picture': user_data.get('picture_url')
+                    })
+                else:
+                    # User not found in database, clear session
+                    session.clear()
+                    return jsonify({'authenticated': False})
+            except Exception as e:
+                print(f"Error verifying user in auth_status: {e}")
+                # Fall back to session data
+                return jsonify({
+                    'authenticated': True,
+                    'user_id': user_id,
+                    'email': session.get('user_email'),
+                    'name': session.get('user_name'),
+                    'picture': session.get('user_picture')
+                })
+        else:
+            # Supabase not configured, use session data
+            return jsonify({
+                'authenticated': True,
+                'user_id': user_id,
+                'email': session.get('user_email'),
+                'name': session.get('user_name'),
+                'picture': session.get('user_picture')
+            })
     return jsonify({'authenticated': False})
 
 
@@ -198,8 +244,9 @@ def get_destinations():
         created = supabase.table('destinations').select('*').eq('user_id', user_id).execute()
         
         # Get destinations where user is a participant
-        participants = supabase.table('event_participants').select('event_id').eq('user_id', user_id).execute()
-        event_ids = [p['event_id'] for p in participants.data] if participants.data else []
+        participants_response = supabase.table('event_participants').select('event_id, participation_type').eq('user_id', user_id).execute()
+        participants_data = participants_response.data if participants_response.data else []
+        event_ids = [p['event_id'] for p in participants_data]
         
         # Get participant destinations
         participant_destinations = []
@@ -211,11 +258,13 @@ def get_destinations():
         all_destinations = {}
         for dest in created.data:
             all_destinations[dest['id']] = {**dest, 'is_organizer': True}
+            # Explicitly set organizer_name to None for events you organize (will show "You" in frontend)
+            all_destinations[dest['id']]['organizer_name'] = None
         
         for dest in participant_destinations:
             if dest['id'] not in all_destinations:
                 # Get participation type
-                part = next((p for p in participants.data if p['event_id'] == dest['id']), None)
+                part = next((p for p in participants_data if p['event_id'] == dest['id']), None)
                 all_destinations[dest['id']] = {
                     **dest,
                     'is_organizer': False,
@@ -223,11 +272,22 @@ def get_destinations():
                 }
         
         # Get organizer info for all destinations (both created and participant)
+        # Only get organizer info for events where user is NOT the organizer
         for dest_id, dest in all_destinations.items():
-            if dest.get('user_id'):
-                organizer = supabase.table('users').select('name, email').eq('id', dest['user_id']).execute()
-                if organizer.data:
-                    dest['organizer_name'] = organizer.data[0].get('name') or organizer.data[0].get('email')
+            if dest.get('user_id') and not dest.get('is_organizer'):
+                try:
+                    organizer = supabase.table('users').select('name, email').eq('id', dest['user_id']).execute()
+                    if organizer.data and len(organizer.data) > 0:
+                        organizer_info = organizer.data[0]
+                        dest['organizer_name'] = organizer_info.get('name') or organizer_info.get('email') or 'Unknown'
+                        # Debug: Log organizer lookup
+                        print(f"Event {dest_id} organizer: user_id={dest['user_id']}, name={dest['organizer_name']}")
+                    else:
+                        dest['organizer_name'] = 'Unknown'
+                        print(f"Warning: No organizer found for event {dest_id} with user_id={dest['user_id']}")
+                except Exception as e:
+                    print(f"Error fetching organizer for event {dest_id}: {e}")
+                    dest['organizer_name'] = 'Unknown'
         
         # Convert to list and sort
         result = list(all_destinations.values())
@@ -239,7 +299,7 @@ def get_destinations():
         return jsonify([])
 
 
-@app.route('/api/destinations/<int:destination_id>', methods=['GET'])
+@app.route('/api/destinations/<destination_id>', methods=['GET'])
 def get_destination(destination_id):
     """Get a single destination with organizer info and participants."""
     if supabase is None:
@@ -254,9 +314,15 @@ def get_destination(destination_id):
         
         # Get organizer info
         if destination.get('user_id'):
-            organizer = supabase.table('users').select('name, email, picture_url').eq('id', destination['user_id']).execute()
-            if organizer.data:
-                destination['organizer'] = organizer.data[0]
+            try:
+                organizer = supabase.table('users').select('id, name, email, picture_url').eq('id', destination['user_id']).execute()
+                if organizer.data and len(organizer.data) > 0:
+                    destination['organizer'] = organizer.data[0]
+                    print(f"Event {destination_id} organizer: user_id={destination['user_id']}, name={organizer.data[0].get('name')}")
+                else:
+                    print(f"Warning: No organizer found for event {destination_id} with user_id={destination['user_id']}")
+            except Exception as e:
+                print(f"Error fetching organizer for event {destination_id}: {e}")
         
         # Get all participants with user info
         participants_response = supabase.table('event_participants').select('*').eq('event_id', destination_id).execute()
@@ -264,9 +330,15 @@ def get_destination(destination_id):
         
         # Get user info for each participant
         for participant in participants:
-            user_info = supabase.table('users').select('id, name, email, picture_url').eq('id', participant['user_id']).execute()
-            if user_info.data:
-                participant['user'] = user_info.data[0]
+            try:
+                user_info = supabase.table('users').select('id, name, email, picture_url').eq('id', participant['user_id']).execute()
+                if user_info.data and len(user_info.data) > 0:
+                    participant['user'] = user_info.data[0]
+                    print(f"Participant: user_id={participant['user_id']}, name={user_info.data[0].get('name')}")
+                else:
+                    print(f"Warning: No user found for participant user_id={participant['user_id']}")
+            except Exception as e:
+                print(f"Error fetching user info for participant user_id={participant['user_id']}: {e}")
         
         destination['participants'] = participants
         
@@ -298,8 +370,12 @@ def save_destination():
             if field not in data:
                 return jsonify({'error': f'Missing required field: {field}'}), 400
         
-        # Add user_id from session
-        data['user_id'] = session['user_id']
+        # Add user_id from session (ensure it's the logged-in user)
+        user_id = session['user_id']
+        data['user_id'] = user_id
+        
+        # Debug: Log the user_id being used
+        print(f"Creating event with user_id: {user_id}")
         
         # If scheduled_time is not provided, set to None (all-day event)
         if 'scheduled_time' not in data or not data['scheduled_time']:
@@ -310,13 +386,19 @@ def save_destination():
             data['status'] = 'active'
         
         response = supabase.table('destinations').insert(data).execute()
+        
+        # Verify the created event has the correct user_id
+        if response.data:
+            created_event = response.data[0] if isinstance(response.data, list) else response.data
+            print(f"Event created with user_id: {created_event.get('user_id')}")
+        
         return jsonify(response.data)
     except Exception as e:
         print(f"Error saving destination: {e}")
         return jsonify({'error': str(e)}), 500
 
 
-@app.route('/api/destinations/<int:destination_id>', methods=['DELETE'])
+@app.route('/api/destinations/<destination_id>', methods=['DELETE'])
 @login_required
 def delete_destination(destination_id):
     """Delete a destination (only if user is the organizer)."""
@@ -339,7 +421,7 @@ def delete_destination(destination_id):
         return jsonify({'error': str(e)}), 500
 
 
-@app.route('/api/destinations/<int:destination_id>/cancel', methods=['PATCH'])
+@app.route('/api/destinations/<destination_id>/cancel', methods=['PATCH'])
 @login_required
 def cancel_destination(destination_id):
     """Cancel a destination (only if user is the organizer)."""
@@ -384,7 +466,7 @@ def cancel_destination(destination_id):
         return jsonify({'error': str(e)}), 500
 
 
-@app.route('/api/events/<int:event_id>/participate', methods=['POST'])
+@app.route('/api/events/<event_id>/participate', methods=['POST'])
 @login_required
 def participate_event(event_id):
     """Join or mark interest in an event."""
@@ -405,6 +487,9 @@ def participate_event(event_id):
         
         user_id = session['user_id']
         
+        # Debug: Log the user_id being used
+        print(f"Participating in event {event_id} with user_id: {user_id}")
+        
         # Check if already participating
         existing = supabase.table('event_participants').select('*').eq('event_id', event_id).eq('user_id', user_id).execute()
         
@@ -421,13 +506,18 @@ def participate_event(event_id):
                 'participation_type': participation_type
             }).execute()
         
+        # Verify the participation record
+        if response.data:
+            participation = response.data[0] if isinstance(response.data, list) else response.data
+            print(f"Participation created/updated with user_id: {participation.get('user_id')}")
+        
         return jsonify(response.data[0] if response.data else {})
     except Exception as e:
         print(f"Error participating in event: {e}")
         return jsonify({'error': str(e)}), 500
 
 
-@app.route('/api/events/<int:event_id>/participate', methods=['DELETE'])
+@app.route('/api/events/<event_id>/participate', methods=['DELETE'])
 @login_required
 def unparticipate_event(event_id):
     """Remove participation from an event."""

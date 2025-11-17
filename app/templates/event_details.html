@@ -225,6 +225,24 @@
             color: #dc3545;
         }
 
+        .home-link {
+            display: inline-block;
+            margin-top: 1.5rem;
+            padding: 0.75rem 1.5rem;
+            background: #667eea;
+            color: white;
+            text-decoration: none;
+            border-radius: 6px;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+
+        .home-link:hover {
+            background: #5568d3;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+
         @media (max-width: 768px) {
             body {
                 padding: 1rem;
@@ -251,6 +269,9 @@
 </head>
 <body>
     <div class="container">
+        <div style="margin-bottom: 1rem;">
+            <a href="/" class="home-link">← Back to Home</a>
+        </div>
         <div id="loading" class="loading">Loading event details...</div>
         <div id="content" style="display: none;">
             <div class="header">
@@ -266,7 +287,7 @@
     </div>
 
     <script>
-        const eventId = {{ event_id }};
+        const eventId = '{{ event_id }}';
         let currentUser = null;
 
         // Check authentication status
@@ -365,32 +386,49 @@
             // Action section
             const actionSection = document.getElementById('action-section');
             if (currentUser) {
-                // User is authenticated - show join/interested buttons
-                const userParticipation = event.participants?.find(p => p.user_id === currentUser.user_id);
-                const participationType = userParticipation?.participation_type;
-
-                if (participationType === 'joined') {
+                // Check if user is the organizer
+                const isOrganizer = event.user_id === currentUser.user_id;
+                
+                if (isOrganizer) {
+                    // Organizer cannot RSVP - they're assumed to be going
                     actionSection.innerHTML = `
                         <div class="participant-actions">
-                            <button class="btn btn-success" disabled>✓ Joined</button>
-                            <button class="btn btn-outline" onclick="removeParticipation()">Remove</button>
-                        </div>
-                    `;
-                } else if (participationType === 'interested') {
-                    actionSection.innerHTML = `
-                        <div class="participant-actions">
-                            <button class="btn btn-primary" onclick="joinEvent()">Join</button>
-                            <button class="btn btn-outline" onclick="markInterested()">✓ Interested</button>
-                            <button class="btn btn-secondary" onclick="removeParticipation()">Remove</button>
+                            <p style="color: #666; margin-bottom: 1rem;">You're the organizer of this event. You're automatically confirmed to attend.</p>
+                            <a href="/?event=${eventId}" class="btn btn-primary">View Event</a>
                         </div>
                     `;
                 } else {
-                    actionSection.innerHTML = `
-                        <div class="participant-actions">
-                            <button class="btn btn-primary" onclick="joinEvent()">Join</button>
-                            <button class="btn btn-outline" onclick="markInterested()">Interested</button>
-                        </div>
-                    `;
+                    // User is authenticated but not organizer - show join/interested buttons
+                    const userParticipation = event.participants?.find(p => p.user_id === currentUser.user_id);
+                    const participationType = userParticipation?.participation_type;
+
+                    const viewEventUrl = `/?event=${eventId}`;
+                    
+                    if (participationType === 'joined') {
+                        actionSection.innerHTML = `
+                            <div class="participant-actions">
+                                <button class="btn btn-success" disabled>✓ Joined</button>
+                                <button class="btn btn-outline" onclick="removeParticipation()">Remove</button>
+                                <a href="${viewEventUrl}" class="btn btn-primary">View Event</a>
+                            </div>
+                        `;
+                    } else if (participationType === 'interested') {
+                        actionSection.innerHTML = `
+                            <div class="participant-actions">
+                                <button class="btn btn-primary" onclick="joinEvent()">Join</button>
+                                <button class="btn btn-outline" onclick="markInterested()">✓ Interested</button>
+                                <button class="btn btn-secondary" onclick="removeParticipation()">Remove</button>
+                                <a href="${viewEventUrl}" class="btn btn-primary">View Event</a>
+                            </div>
+                        `;
+                    } else {
+                        actionSection.innerHTML = `
+                            <div class="participant-actions">
+                                <button class="btn btn-primary" onclick="joinEvent()">Join</button>
+                                <button class="btn btn-outline" onclick="markInterested()">Interested</button>
+                            </div>
+                        `;
+                    }
                 }
             } else {
                 // User is not authenticated - show sign in prompt
@@ -413,7 +451,7 @@
                     body: JSON.stringify({ type: 'joined' })
                 });
                 if (response.ok) {
-                    loadEventDetails();
+                    await loadEventDetails();
                 } else {
                     alert('Error joining event');
                 }
@@ -431,7 +469,7 @@
                     body: JSON.stringify({ type: 'interested' })
                 });
                 if (response.ok) {
-                    loadEventDetails();
+                    await loadEventDetails();
                 } else {
                     alert('Error marking interest');
                 }
