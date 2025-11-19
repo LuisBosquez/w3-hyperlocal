@@ -2390,7 +2390,14 @@
 
             timeInput.disabled = false;
             timeInput.min = timeRange.start;
-            timeInput.max = timeRange.end;
+            
+            // If end time is 00:00 (midnight), it means the business is open until the end of the day
+            // HTML5 time input max should be 23:59, not 00:00
+            if (timeRange.end === '00:00') {
+                timeInput.max = '23:59';
+            } else {
+                timeInput.max = timeRange.end;
+            }
         }
 
         // Convert time input to 24-hour format
@@ -3178,14 +3185,26 @@
                         if (timeRange) {
                             const [selectedHour, selectedMin] = time.split(':').map(Number);
                             const [startHour, startMin] = timeRange.start.split(':').map(Number);
-                            const [endHour, endMin] = timeRange.end.split(':').map(Number);
+                            let [endHour, endMin] = timeRange.end.split(':').map(Number);
+                            
+                            // If end time is 00:00 (midnight), it means the business is open until the end of the day
+                            // So we treat it as 23:59 for validation purposes
+                            if (endHour === 0 && endMin === 0) {
+                                endHour = 23;
+                                endMin = 59;
+                            }
                             
                             const selectedTimeMinutes = selectedHour * 60 + selectedMin;
                             const startTimeMinutes = startHour * 60 + startMin;
                             const endTimeMinutes = endHour * 60 + endMin;
                             
                             if (selectedTimeMinutes < startTimeMinutes || selectedTimeMinutes > endTimeMinutes) {
-                                alert(`The selected time is outside of business hours (${timeRange.start} - ${timeRange.end}). Please select a time within the opening hours.`);
+                                // Format the display time range for the error message
+                                let displayEnd = timeRange.end;
+                                if (timeRange.end === '00:00') {
+                                    displayEnd = '11:59 PM';
+                                }
+                                alert(`The selected time is outside of business hours (${timeRange.start} - ${displayEnd}). Please select a time within the opening hours.`);
                                 return;
                             }
                         }

@@ -6,6 +6,9 @@ from functools import wraps
 from datetime import datetime
 import requests
 import json
+from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.triggers.interval import IntervalTrigger
+import atexit
 
 load_dotenv()
 
@@ -22,6 +25,13 @@ if supabase_url and supabase_key:
 else:
     supabase = None
     print("Warning: Supabase credentials not found. Some features may not work.")
+
+# Initialize background job scheduler
+scheduler = BackgroundScheduler()
+scheduler.start()
+
+# Shut down the scheduler when exiting the app
+atexit.register(lambda: scheduler.shutdown())
 
 # Google OAuth configuration
 GOOGLE_CLIENT_ID = os.getenv('GOOGLE_CLIENT_ID')
@@ -531,6 +541,39 @@ def unparticipate_event(event_id):
     except Exception as e:
         print(f"Error removing participation: {e}")
         return jsonify({'error': str(e)}), 500
+
+
+# Initialize background jobs
+def init_jobs():
+    """Initialize and schedule all background jobs."""
+    if supabase is None:
+        print("Warning: Background jobs not started - Supabase not configured")
+        return
+    
+    from app.jobs import EventStatusUpdater
+    
+    # Create job instance
+    event_status_updater = EventStatusUpdater(supabase)
+    
+    # Run immediately on startup to catch up on any past events
+    print("Running initial event status update to catch up on past events...")
+    initial_result = event_status_updater.run()
+    print(f"Initial update: {initial_result.get('message', 'Completed')}")
+    
+    # Schedule job to run every 1 minute
+    scheduler.add_job(
+        func=event_status_updater.run,
+        trigger=IntervalTrigger(minutes=1),
+        id='event_status_updater',
+        name='Update Event Statuses',
+        replace_existing=True
+    )
+    
+    print("Background jobs initialized: EventStatusUpdater scheduled to run every 1 minute")
+
+
+# Initialize jobs when app starts
+init_jobs()
 
 
 @app.route('/api/users/<int:user_id>', methods=['GET'])

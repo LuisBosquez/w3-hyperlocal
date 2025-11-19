@@ -115,6 +115,37 @@ The application will be available at `http://localhost:5001`
 
 **Note:** The app runs on port 5001 to avoid conflicts with macOS AirPlay Receiver on port 5000.
 
+#### Background Scheduler
+
+The application includes a **background job scheduler** that runs automatically when you start the Flask app. The scheduler handles periodic tasks without any additional setup:
+
+**Automatic Features:**
+- **Event Status Updates**: Automatically updates event statuses from "active" to "past" when events have passed
+- **Runs every 1 minute**: Continuously monitors all events in the database
+- **Immediate catch-up**: On startup, immediately processes all existing past events
+- **No manual intervention**: Works automatically in the background
+
+**What happens when you start the app:**
+1. The scheduler starts automatically
+2. It immediately runs an initial check to update any existing past events
+3. Then it runs every minute to catch newly past events
+4. You'll see console messages indicating when jobs run and how many events were updated
+
+**Console Output Example:**
+```
+Running initial event status update to catch up on past events...
+Initial update: Updated 5 event(s) to past status
+Background jobs initialized: EventStatusUpdater scheduled to run every 1 minute
+```
+
+**Modular Jobs Framework:**
+The background jobs system is designed to be modular and extensible. New jobs can be easily added by:
+1. Creating a new job class in `app/jobs/` that extends `BaseJob`
+2. Implementing the `execute()` method with your job logic
+3. Registering the job in `init_jobs()` function in `app/app.py`
+
+**Note:** The scheduler runs in the same process as the Flask app. For production deployments, consider running the scheduler as a separate service or using a process manager like Supervisor or systemd.
+
 ## Project Structure
 
 ```
@@ -122,6 +153,10 @@ w3-hyperlocal/
 ├── app/                   # Application code
 │   ├── app.py            # Flask application and routes
 │   ├── __init__.py       # Package initialization
+│   ├── jobs/             # Background jobs module
+│   │   ├── __init__.py   # Jobs package initialization
+│   │   ├── base_job.py   # Base class for all background jobs
+│   │   └── event_status_updater.py  # Job to update event statuses
 │   └── templates/        # HTML templates
 │       ├── index.html    # Main page with map component
 │       └── event_details.html  # Event details page for URL access
@@ -386,10 +421,11 @@ Tracks user participation in events:
 
 **Past Event:**
 1. An event date passes
-2. The system automatically marks it as "Past"
+2. The background scheduler automatically marks it as "Past" (runs every minute)
 3. It appears in your list with "Past" status
 4. You cannot cancel past events
 5. You can still view details and delete if needed
+6. The scheduler also catches up on all existing past events when the app starts
 
 **Cancelled Event:**
 1. As an organizer, you cancel an upcoming event
@@ -441,6 +477,7 @@ Recommendations appear as green markers on the map with a headline explaining wh
 
 - **Flask 3.0.0** - Python web framework
 - **Supabase** - Backend as a service (PostgreSQL database)
+- **APScheduler 3.10.4** - Background job scheduling
 - **Google Maps JavaScript API** - Map rendering
 - **Google Places API** - Place search and details
 - **Google OAuth 2.0** - User authentication
