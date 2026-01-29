@@ -3,7 +3,7 @@ from supabase import create_client, Client
 import os
 from dotenv import load_dotenv
 from functools import wraps
-from datetime import datetime
+from datetime import datetime, date, timedelta
 import requests
 import json
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -21,7 +21,19 @@ supabase_url = os.getenv('SUPABASE_URL')
 supabase_key = os.getenv('SUPABASE_KEY')
 
 if supabase_url and supabase_key:
-    supabase: Client = create_client(supabase_url, supabase_key)
+    try:
+        supabase: Client = create_client(supabase_url, supabase_key)
+        # Test connection with a simple query
+        try:
+            supabase.table('users').select('id').limit(1).execute()
+            print("✓ Supabase connection successful")
+        except Exception as e:
+            print(f"⚠ Warning: Supabase client created but connection test failed: {e}")
+            print("  This may indicate the project is paused or unreachable.")
+            supabase = None
+    except Exception as e:
+        print(f"✗ Error initializing Supabase client: {e}")
+        supabase = None
 else:
     supabase = None
     print("Warning: Supabase credentials not found. Some features may not work.")
@@ -49,11 +61,72 @@ def login_required(f):
     return decorated_function
 
 
+def check_supabase_connection():
+    """
+    Check if Supabase is available and return status.
+    
+    Returns:
+        tuple: (is_available: bool, error_message: str or None)
+    """
+    if supabase is None:
+        return False, "Supabase is not configured"
+    
+    try:
+        # Try a simple query to test connectivity
+        supabase.table('users').select('id').limit(1).execute()
+        return True, None
+    except Exception as e:
+        error_msg = str(e).lower()
+        if 'nodename' in error_msg or 'servname' in error_msg or 'dns' in error_msg:
+            return False, "Supabase project appears to be paused or unreachable. Please check your Supabase project status."
+        elif 'connection' in error_msg or 'timeout' in error_msg:
+            return False, "Cannot connect to Supabase. Please check your internet connection and Supabase project status."
+        else:
+            return False, f"Supabase error: {str(e)}"
+
+
+def handle_supabase_error(e, default_message="Database error"):
+    """
+    Handle Supabase errors and return user-friendly messages.
+    
+    Args:
+        e: Exception object
+        default_message: Default error message if error type is unknown
+        
+    Returns:
+        str: User-friendly error message
+    """
+    error_msg = str(e).lower()
+    
+    if 'nodename' in error_msg or 'servname' in error_msg or 'dns' in error_msg:
+        return "Supabase project appears to be paused or unreachable. Please check your Supabase project status."
+    elif 'connection' in error_msg or 'timeout' in error_msg:
+        return "Cannot connect to Supabase. Please check your internet connection and Supabase project status."
+    elif 'authentication' in error_msg or 'unauthorized' in error_msg:
+        return "Supabase authentication failed. Please check your API keys."
+    else:
+        return default_message
+
+
 @app.route('/')
 def index():
     """Render the main page with the map component."""
     google_maps_api_key = os.getenv('GOOGLE_MAPS_API_KEY', '')
     return render_template('index.html', google_maps_api_key=google_maps_api_key)
+
+
+@app.route('/api/health')
+def health_check():
+    """Health check endpoint to verify Supabase connectivity."""
+    supabase_status, error_message = check_supabase_connection()
+    return jsonify({
+        'status': 'healthy' if supabase_status else 'degraded',
+        'supabase': {
+            'available': supabase_status,
+            'error': error_message
+        },
+        'timestamp': datetime.now().isoformat()
+    }), 200 if supabase_status else 503
 
 
 @app.route('/event/<event_id>')
@@ -68,6 +141,15 @@ def google_auth():
     """Initiate Google OAuth flow."""
     if not GOOGLE_CLIENT_ID:
         return jsonify({'error': 'Google OAuth not configured'}), 500
+    
+    # Validate redirect URI format
+    from urllib.parse import urlparse
+    parsed_uri = urlparse(GOOGLE_REDIRECT_URI)
+    if not parsed_uri.scheme or not parsed_uri.netloc:
+        print(f"ERROR: Invalid redirect URI format: {GOOGLE_REDIRECT_URI}")
+        return jsonify({'error': f'Invalid redirect URI format: {GOOGLE_REDIRECT_URI}'}), 500
+    
+    print(f"Starting OAuth flow with redirect_uri: {GOOGLE_REDIRECT_URI}")
     
     from urllib.parse import urlencode
     params = {
@@ -100,48 +182,103 @@ def google_callback():
     }
     
     try:
-        token_response = requests.post(token_url, data=token_data)
+        # Validate redirect URI before making requests
+        if not GOOGLE_REDIRECT_URI or not GOOGLE_CLIENT_ID or not GOOGLE_CLIENT_SECRET:
+            print(f"OAuth configuration error: redirect_uri={GOOGLE_REDIRECT_URI}, client_id={'set' if GOOGLE_CLIENT_ID else 'missing'}, client_secret={'set' if GOOGLE_CLIENT_SECRET else 'missing'}")
+            return redirect('/?error=oauth_not_configured')
+        
+        # Validate redirect URI format
+        from urllib.parse import urlparse
+        parsed_uri = urlparse(GOOGLE_REDIRECT_URI)
+        if not parsed_uri.scheme or not parsed_uri.netloc:
+            print(f"Invalid redirect URI format: {GOOGLE_REDIRECT_URI}")
+            return redirect('/?error=invalid_redirect_uri')
+        
+        # Ensure redirect URI is properly formatted (no port in hostname for validation)
+        # The redirect URI should be the full URL including port, but we need to validate it correctly
+        redirect_uri_for_request = GOOGLE_REDIRECT_URI
+        
+        print(f"Exchanging code for token with redirect_uri: {redirect_uri_for_request}")
+        print(f"Token URL: {token_url}")
+        print(f"Client ID: {GOOGLE_CLIENT_ID[:10]}... (truncated)")
+        
+        # Make the token exchange request with explicit timeout and error handling
+        try:
+            token_response = requests.post(
+                token_url, 
+                data=token_data, 
+                timeout=10,
+                headers={'Content-Type': 'application/x-www-form-urlencoded'}
+            )
+        except requests.exceptions.Timeout:
+            print("ERROR: Timeout while exchanging code for token")
+            return redirect('/?error=timeout')
+        except requests.exceptions.ConnectionError as e:
+            print(f"ERROR: Connection error while exchanging code for token: {e}")
+            print(f"Error details: {type(e).__name__}")
+            if hasattr(e, 'args') and e.args:
+                print(f"Error args: {e.args}")
+            return redirect('/?error=connection_error')
+        
         token_response.raise_for_status()
         tokens = token_response.json()
         access_token = tokens['access_token']
         
         # Get user info from Google
+        print("Fetching user info from Google")
         user_info_url = 'https://www.googleapis.com/oauth2/v2/userinfo'
         headers = {'Authorization': f'Bearer {access_token}'}
-        user_response = requests.get(user_info_url, headers=headers)
+        try:
+            user_response = requests.get(user_info_url, headers=headers, timeout=10)
+        except requests.exceptions.Timeout:
+            print("ERROR: Timeout while fetching user info")
+            return redirect('/?error=timeout')
+        except requests.exceptions.ConnectionError as e:
+            print(f"ERROR: Connection error while fetching user info: {e}")
+            print(f"Error details: {type(e).__name__}")
+            return redirect('/?error=connection_error')
+        
         user_response.raise_for_status()
         user_info = user_response.json()
         
         # Store or update user in database
         if supabase:
-            # Check if user exists
-            user_check = supabase.table('users').select('*').eq('google_id', user_info['id']).execute()
-            
-            if user_check.data:
-                user = user_check.data[0]
-                user_id = user['id']
-                # Update user info in case it changed (name, email, picture)
-                # This ensures the database always has the latest info from Google
-                update_response = supabase.table('users').update({
-                    'email': user_info['email'],
-                    'name': user_info.get('name'),
-                    'picture_url': user_info.get('picture')
-                }).eq('id', user_id).execute()
-                print(f"Updated user {user_id}: name={user_info.get('name')}, email={user_info['email']}")
-            else:
-                # Create new user
-                new_user = supabase.table('users').insert({
-                    'google_id': user_info['id'],
-                    'email': user_info['email'],
-                    'name': user_info.get('name'),
-                    'picture_url': user_info.get('picture')
-                }).execute()
-                user_id = new_user.data[0]['id']
-                print(f"Created new user {user_id}: name={user_info.get('name')}, email={user_info['email']}, google_id={user_info['id']}")
-            
-            # Store in session
-            session['user_id'] = user_id
-            session['user_email'] = user_info['email']
+            try:
+                # Check if user exists
+                user_check = supabase.table('users').select('*').eq('google_id', user_info['id']).execute()
+                
+                if user_check.data:
+                    user = user_check.data[0]
+                    user_id = user['id']
+                    # Update user info in case it changed (name, email, picture)
+                    # This ensures the database always has the latest info from Google
+                    update_response = supabase.table('users').update({
+                        'email': user_info['email'],
+                        'name': user_info.get('name'),
+                        'picture_url': user_info.get('picture')
+                    }).eq('id', user_id).execute()
+                    print(f"Updated user {user_id}: name={user_info.get('name')}, email={user_info['email']}")
+                else:
+                    # Create new user
+                    new_user = supabase.table('users').insert({
+                        'google_id': user_info['id'],
+                        'email': user_info['email'],
+                        'name': user_info.get('name'),
+                        'picture_url': user_info.get('picture')
+                    }).execute()
+                    user_id = new_user.data[0]['id']
+                    print(f"Created new user {user_id}: name={user_info.get('name')}, email={user_info['email']}, google_id={user_info['id']}")
+                
+                # Store in session
+                session['user_id'] = user_id
+                session['user_email'] = user_info['email']
+            except Exception as e:
+                error_message = handle_supabase_error(e, "Failed to save user information")
+                print(f"ERROR: {error_message}")
+                print(f"Exception details: {type(e).__name__}: {e}")
+                return redirect(f'/?error=supabase_error&message={error_message.replace(" ", "%20")}')
+        else:
+            return redirect('/?error=supabase_not_configured')
             session['user_name'] = user_info.get('name')
             session['user_picture'] = user_info.get('picture')
             
@@ -151,8 +288,17 @@ def google_callback():
         # Redirect back to the page they came from or home
         redirect_url = request.args.get('redirect', '/')
         return redirect(redirect_url)
+    except requests.exceptions.RequestException as e:
+        print(f"Network error in Google OAuth callback: {e}")
+        print(f"Error type: {type(e).__name__}")
+        if hasattr(e, 'request'):
+            print(f"Request URL: {e.request.url if e.request else 'N/A'}")
+        return redirect('/?error=network_error')
     except Exception as e:
         print(f"Error in Google OAuth callback: {e}")
+        print(f"Error type: {type(e).__name__}")
+        import traceback
+        traceback.print_exc()
         return redirect('/?error=auth_failed')
 
 
@@ -190,15 +336,23 @@ def auth_status():
                     session.clear()
                     return jsonify({'authenticated': False})
             except Exception as e:
-                print(f"Error verifying user in auth_status: {e}")
-                # Fall back to session data
-                return jsonify({
-                    'authenticated': True,
-                    'user_id': user_id,
-                    'email': session.get('user_email'),
-                    'name': session.get('user_name'),
-                    'picture': session.get('user_picture')
-                })
+                error_message = handle_supabase_error(e, "Error verifying user")
+                print(f"Error verifying user in auth_status: {error_message}")
+                # Fall back to session data if available
+                if 'user_id' in session:
+                    return jsonify({
+                        'authenticated': True,
+                        'user_id': user_id,
+                        'email': session.get('user_email'),
+                        'name': session.get('user_name'),
+                        'picture': session.get('user_picture'),
+                        'warning': 'Database connection issue - using cached session data'
+                    })
+                else:
+                    return jsonify({
+                        'authenticated': False,
+                        'error': error_message
+                    }), 503
         else:
             # Supabase not configured, use session data
             return jsonify({
@@ -245,7 +399,12 @@ def save_place():
 def get_destinations():
     """Get destinations for the authenticated user (created, joined, or interested)."""
     if supabase is None:
-        return jsonify([])
+        return jsonify({'error': 'Database not configured'}), 503
+    
+    # Check Supabase connection first
+    supabase_available, error_message = check_supabase_connection()
+    if not supabase_available:
+        return jsonify({'error': error_message}), 503
     
     try:
         user_id = session['user_id']
@@ -299,14 +458,44 @@ def get_destinations():
                     print(f"Error fetching organizer for event {dest_id}: {e}")
                     dest['organizer_name'] = 'Unknown'
         
-        # Convert to list and sort
+        # Convert to list for further processing
         result = list(all_destinations.values())
+        
+        # Fetch participant counts for all relevant events to determine friend labels
+        event_ids = list(all_destinations.keys())
+        friends_counts = {}
+        if event_ids:
+            participants_response = supabase.table('event_participants')\
+                .select('event_id, user_id, participation_type')\
+                .in_('event_id', event_ids)\
+                .execute()
+            if participants_response.data:
+                for participant in participants_response.data:
+                    event_id = participant.get('event_id')
+                    participant_user_id = participant.get('user_id')
+                    if participant_user_id == user_id:
+                        continue  # Skip the current user
+                    if event_id not in friends_counts:
+                        friends_counts[event_id] = {'joined': 0, 'interested': 0}
+                    if participant.get('participation_type') == 'joined':
+                        friends_counts[event_id]['joined'] += 1
+                    elif participant.get('participation_type') == 'interested':
+                        friends_counts[event_id]['interested'] += 1
+        
+        # Attach friend counts to destinations
+        for dest in result:
+            counts = friends_counts.get(dest['id'], {'joined': 0, 'interested': 0})
+            dest['friends_joining_count'] = counts['joined']
+            dest['friends_interested_count'] = counts['interested']
+        
+        # Sort final result
         result.sort(key=lambda x: (x.get('scheduled_date', ''), x.get('scheduled_time', '')))
         
         return jsonify(result)
     except Exception as e:
-        print(f"Error fetching destinations: {e}")
-        return jsonify([])
+        error_message = handle_supabase_error(e, "Failed to fetch destinations")
+        print(f"Error fetching destinations: {error_message}")
+        return jsonify({'error': error_message}), 503
 
 
 @app.route('/api/destinations/<destination_id>', methods=['GET'])
@@ -329,6 +518,15 @@ def get_destination(destination_id):
                 if organizer.data and len(organizer.data) > 0:
                     destination['organizer'] = organizer.data[0]
                     print(f"Event {destination_id} organizer: user_id={destination['user_id']}, name={organizer.data[0].get('name')}")
+                    
+                    # Check if current user is following the organizer (if authenticated)
+                    if 'user_id' in session:
+                        current_user_id = session['user_id']
+                        organizer_id = destination['organizer']['id']
+                        if organizer_id != current_user_id:
+                            follow_check = supabase.table('user_follows').select('id').eq('follower_id', current_user_id).eq('following_id', organizer_id).execute()
+                            if follow_check.data:
+                                destination['is_friend_event'] = True
                 else:
                     print(f"Warning: No organizer found for event {destination_id} with user_id={destination['user_id']}")
             except Exception as e:
@@ -337,6 +535,18 @@ def get_destination(destination_id):
         # Get all participants with user info
         participants_response = supabase.table('event_participants').select('*').eq('event_id', destination_id).execute()
         participants = participants_response.data if participants_response.data else []
+        
+        # Get user info for each participant and check if we're following them
+        if 'user_id' in session:
+            current_user_id = session['user_id']
+            for participant in participants:
+                participant_user_id = participant.get('user_id')
+                if participant_user_id and participant_user_id != current_user_id:
+                    # Check if we're following this participant
+                    follow_check = supabase.table('user_follows').select('id').eq('follower_id', current_user_id).eq('following_id', participant_user_id).execute()
+                    if follow_check.data:
+                        # This is a friend event because we're following a participant
+                        destination['is_friend_event'] = True
         
         # Get user info for each participant
         for participant in participants:
@@ -360,8 +570,9 @@ def get_destination(destination_id):
         
         return jsonify(destination)
     except Exception as e:
-        print(f"Error fetching destination: {e}")
-        return jsonify({'error': str(e)}), 500
+        error_message = handle_supabase_error(e, "Failed to fetch destination")
+        print(f"Error fetching destination: {error_message}")
+        return jsonify({'error': error_message}), 503
 
 
 @app.route('/api/destinations', methods=['POST'])
@@ -369,7 +580,12 @@ def get_destination(destination_id):
 def save_destination():
     """Save a destination/event to Supabase."""
     if supabase is None:
-        return jsonify({'error': 'Supabase not configured'}), 500
+        return jsonify({'error': 'Database not configured'}), 503
+    
+    # Check Supabase connection first
+    supabase_available, error_message = check_supabase_connection()
+    if not supabase_available:
+        return jsonify({'error': error_message}), 503
     
     try:
         data = request.get_json()
@@ -395,17 +611,23 @@ def save_destination():
         if 'status' not in data:
             data['status'] = 'active'
         
-        response = supabase.table('destinations').insert(data).execute()
-        
-        # Verify the created event has the correct user_id
-        if response.data:
-            created_event = response.data[0] if isinstance(response.data, list) else response.data
-            print(f"Event created with user_id: {created_event.get('user_id')}")
-        
-        return jsonify(response.data)
+        try:
+            response = supabase.table('destinations').insert(data).execute()
+            
+            # Verify the created event has the correct user_id
+            if response.data:
+                created_event = response.data[0] if isinstance(response.data, list) else response.data
+                print(f"Event created with user_id: {created_event.get('user_id')}")
+            
+            return jsonify(response.data[0] if isinstance(response.data, list) and len(response.data) > 0 else response.data)
+        except Exception as e:
+            error_message = handle_supabase_error(e, "Failed to save destination")
+            print(f"Error saving destination: {error_message}")
+            return jsonify({'error': error_message}), 503
     except Exception as e:
-        print(f"Error saving destination: {e}")
-        return jsonify({'error': str(e)}), 500
+        error_message = handle_supabase_error(e, "Failed to save destination")
+        print(f"Error saving destination: {error_message}")
+        return jsonify({'error': error_message}), 503
 
 
 @app.route('/api/destinations/<destination_id>', methods=['DELETE'])
@@ -578,7 +800,7 @@ init_jobs()
 
 @app.route('/api/users/<int:user_id>', methods=['GET'])
 def get_user(user_id):
-    """Get user profile information."""
+    """Get user profile information with follow status and upcoming events."""
     if supabase is None:
         return jsonify({'error': 'Supabase not configured'}), 500
     
@@ -591,9 +813,211 @@ def get_user(user_id):
         # Don't expose google_id
         user.pop('google_id', None)
         
+        # Check if current user is following this user
+        is_following = False
+        if 'user_id' in session:
+            current_user_id = session['user_id']
+            follow_check = supabase.table('user_follows').select('id').eq('follower_id', current_user_id).eq('following_id', user_id).execute()
+            is_following = len(follow_check.data) > 0 if follow_check.data else False
+        
+        user['is_following'] = is_following
+        
+        # Upcoming events (next 7 days including today/weekend)
+        start_date = date.today()
+        end_date = start_date + timedelta(days=7)
+        start_iso = start_date.isoformat()
+        end_iso = end_date.isoformat()
+        
+        upcoming_events = []
+        
+        # Events user organized within range
+        organized_events = supabase.table('destinations').select('*')\
+            .eq('user_id', user_id)\
+            .eq('status', 'active')\
+            .gte('scheduled_date', start_iso)\
+            .lte('scheduled_date', end_iso)\
+            .execute()
+        if organized_events.data:
+            for event in organized_events.data:
+                event['is_organizer'] = True
+                upcoming_events.append(event)
+        
+        # Events user is participating in within range
+        participant_events = supabase.table('event_participants').select('event_id, participation_type')\
+            .eq('user_id', user_id).execute()
+        if participant_events.data:
+            event_ids = [p['event_id'] for p in participant_events.data]
+            if event_ids:
+                participant_destinations = supabase.table('destinations').select('*')\
+                    .in_('id', event_ids)\
+                    .eq('status', 'active')\
+                    .gte('scheduled_date', start_iso)\
+                    .lte('scheduled_date', end_iso)\
+                    .execute()
+                if participant_destinations.data:
+                    for event in participant_destinations.data:
+                        part = next((p for p in participant_events.data if p['event_id'] == event['id']), None)
+                        event['is_organizer'] = False
+                        event['participation_type'] = part['participation_type'] if part else None
+                        upcoming_events.append(event)
+        
+        # Sort by date then time
+        upcoming_events.sort(key=lambda x: (
+            x.get('scheduled_date', ''),
+            x.get('scheduled_time') or '23:59:59'
+        ))
+        user['upcoming_events'] = upcoming_events
+        
         return jsonify(user)
     except Exception as e:
         print(f"Error fetching user: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/users/<int:user_id>/follow', methods=['POST'])
+@login_required
+def follow_user(user_id):
+    """Follow a user."""
+    if supabase is None:
+        return jsonify({'error': 'Supabase not configured'}), 500
+    
+    try:
+        follower_id = session['user_id']
+        
+        # Can't follow yourself
+        if follower_id == user_id:
+            return jsonify({'error': 'Cannot follow yourself'}), 400
+        
+        # Check if already following
+        existing = supabase.table('user_follows').select('id').eq('follower_id', follower_id).eq('following_id', user_id).execute()
+        if existing.data:
+            return jsonify({'error': 'Already following this user'}), 400
+        
+        # Create follow relationship
+        response = supabase.table('user_follows').insert({
+            'follower_id': follower_id,
+            'following_id': user_id
+        }).execute()
+        
+        return jsonify({'success': True, 'message': 'User followed successfully'})
+    except Exception as e:
+        print(f"Error following user: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/users/<int:user_id>/follow', methods=['DELETE'])
+@login_required
+def unfollow_user(user_id):
+    """Unfollow a user."""
+    if supabase is None:
+        return jsonify({'error': 'Supabase not configured'}), 500
+    
+    try:
+        follower_id = session['user_id']
+        
+        response = supabase.table('user_follows').delete().eq('follower_id', follower_id).eq('following_id', user_id).execute()
+        
+        return jsonify({'success': True, 'message': 'User unfollowed successfully'})
+    except Exception as e:
+        print(f"Error unfollowing user: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/friends', methods=['GET'])
+@login_required
+def get_friends():
+    """Get list of users that the current user follows."""
+    if supabase is None:
+        return jsonify({'error': 'Supabase not configured'}), 500
+    
+    try:
+        user_id = session['user_id']
+        
+        # Get all users that current user follows
+        follows_response = supabase.table('user_follows').select('following_id').eq('follower_id', user_id).execute()
+        
+        if not follows_response.data:
+            return jsonify([])
+        
+        following_ids = [f['following_id'] for f in follows_response.data]
+        
+        # Get user details for followed users
+        users_response = supabase.table('users').select('id, email, name, picture_url, created_at').in_('id', following_ids).execute()
+        
+        return jsonify(users_response.data if users_response.data else [])
+    except Exception as e:
+        print(f"Error fetching friends: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/friends/events', methods=['GET'])
+@login_required
+def get_friend_events():
+    """Get active events from users that the current user follows."""
+    if supabase is None:
+        return jsonify({'error': 'Supabase not configured'}), 500
+    
+    try:
+        user_id = session['user_id']
+        
+        # Get all users that current user follows
+        follows_response = supabase.table('user_follows').select('following_id').eq('follower_id', user_id).execute()
+        
+        if not follows_response.data:
+            return jsonify([])
+        
+        following_ids = [f['following_id'] for f in follows_response.data]
+        
+        # Get active events from followed users (not past, not cancelled)
+        # Events where followed user is organizer
+        events_response = supabase.table('destinations').select('*').in_('user_id', following_ids).eq('status', 'active').gte('scheduled_date', date.today().isoformat()).execute()
+        
+        # Also get events where followed users are participants (joined or interested)
+        participant_events_response = supabase.table('event_participants').select('event_id, user_id, participation_type').in_('user_id', following_ids).execute()
+        
+        friend_events = []
+        if events_response.data:
+            for event in events_response.data:
+                # Get organizer info
+                organizer = supabase.table('users').select('id, name, email, picture_url').eq('id', event['user_id']).execute()
+                if organizer.data:
+                    event['organizer'] = organizer.data[0]
+                    event['is_organizer'] = False  # Not organized by current user
+                friend_events.append(event)
+        
+        # Get events where followed users are participants
+        if participant_events_response.data:
+            event_ids = [p['event_id'] for p in participant_events_response.data]
+            if event_ids:
+                part_events = supabase.table('destinations').select('*').in_('id', event_ids).eq('status', 'active').gte('scheduled_date', date.today().isoformat()).execute()
+                if part_events.data:
+                    for event in part_events.data:
+                        # Get the followed user's participation info
+                        part = next((p for p in participant_events_response.data if p['event_id'] == event['id']), None)
+                        if part:
+                            # Get the followed user's info
+                            followed_user = supabase.table('users').select('id, name, email, picture_url').eq('id', part['user_id']).execute()
+                            if followed_user.data:
+                                event['friend_participant'] = followed_user.data[0]
+                                event['friend_participation_type'] = part['participation_type']
+                                # Get organizer info
+                                if event.get('user_id'):
+                                    organizer = supabase.table('users').select('id, name, email, picture_url').eq('id', event['user_id']).execute()
+                                    if organizer.data:
+                                        event['organizer'] = organizer.data[0]
+                                friend_events.append(event)
+        
+        # Remove duplicates (same event might appear if user is both organizer and participant)
+        seen_event_ids = set()
+        unique_events = []
+        for event in friend_events:
+            if event['id'] not in seen_event_ids:
+                seen_event_ids.add(event['id'])
+                unique_events.append(event)
+        
+        return jsonify(unique_events)
+    except Exception as e:
+        print(f"Error fetching friend events: {e}")
         return jsonify({'error': str(e)}), 500
 
 

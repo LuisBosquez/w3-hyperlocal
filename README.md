@@ -7,6 +7,7 @@ A web application built with Python Flask and Supabase, featuring an interactive
 - **Interactive Map** with Google Maps integration
 - **Google Places API** search and autocomplete
 - **Time-based Recommendations** - Smart suggestions based on time of day and weather
+- **Refresh Places** - Get new recommendations by clicking the locate button after centering the map. Click once to center, then click again to refresh with new places (up to 2 refreshes).
 - **Event Management** - Create, join, and manage events at local places
 - **Google OAuth Authentication** - Secure user authentication
 - **Event Participation** - Join or mark interest in events
@@ -472,6 +473,15 @@ The app automatically shows 3 relevant places based on:
 - **Availability**: Only places that are currently open
 
 Recommendations appear as green markers on the map with a headline explaining why they're suggested.
+
+### Refresh Places Feature
+After the initial recommendations are shown, users can refresh to get new places:
+- **How to use**: Click the locate button once to center the map on your location. The button icon will change to show a "+" sign, indicating refresh mode. Click again to get new recommendations (up to 2 refreshes).
+- **Icon changes**: The locate button icon changes from concentric circles to a "+" sign after the first click, indicating you can refresh.
+- **Map movement**: If you move the map around, the button icon resets to the initial state, but the refresh count persists.
+- **Place exclusion**: All previously shown places (initial + all refreshes) are excluded from new recommendations to ensure variety.
+- **Configurable limit**: The number of places shown at a time is configurable (default: 3) to keep the UI clutter-free.
+- **Limit reached**: After 2 refreshes, clicking the button again shows a toast notification: "No more places left".
 
 ## Technologies Used
 

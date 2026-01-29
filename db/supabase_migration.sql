@@ -3,6 +3,7 @@
 -- This script is idempotent - you can run it multiple times safely
 
 -- Drop tables if they exist (WARNING: This will delete all data!)
+DROP TABLE IF EXISTS user_follows CASCADE;
 DROP TABLE IF EXISTS event_participants CASCADE;
 DROP TABLE IF EXISTS destinations CASCADE;
 DROP TABLE IF EXISTS users CASCADE;
@@ -69,6 +70,19 @@ CREATE TABLE event_participants (
 -- Create indexes for event_participants
 CREATE INDEX IF NOT EXISTS idx_event_participants_event ON event_participants(event_id);
 CREATE INDEX IF NOT EXISTS idx_event_participants_user ON event_participants(user_id);
+
+-- User follows table (for following friends)
+CREATE TABLE user_follows (
+  id BIGSERIAL PRIMARY KEY,
+  follower_id BIGINT REFERENCES users(id) ON DELETE CASCADE,
+  following_id BIGINT REFERENCES users(id) ON DELETE CASCADE,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  UNIQUE(follower_id, following_id) -- Prevent duplicate follows
+);
+
+-- Create indexes for user_follows
+CREATE INDEX IF NOT EXISTS idx_user_follows_follower ON user_follows(follower_id);
+CREATE INDEX IF NOT EXISTS idx_user_follows_following ON user_follows(following_id);
 
 -- Note: Status column is now included in the CREATE TABLE statement above
 -- The following block is kept for backward compatibility if running on existing tables

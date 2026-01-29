@@ -150,6 +150,60 @@
             height: 20px;
         }
 
+        .location-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        /* Toast Notification Styles */
+        .toast-container {
+            position: fixed;
+            bottom: 2rem;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 3000;
+            pointer-events: none;
+        }
+
+        .toast {
+            background: rgba(0, 0, 0, 0.85);
+            color: white;
+            padding: 1rem 1.5rem;
+            border-radius: 8px;
+            font-size: 0.95rem;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+            animation: toastFadeIn 0.3s ease-out;
+            pointer-events: auto;
+            max-width: 90vw;
+            text-align: center;
+        }
+
+        @keyframes toastFadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes toastFadeOut {
+            from {
+                opacity: 1;
+                transform: translateY(0);
+            }
+            to {
+                opacity: 0;
+                transform: translateY(-20px);
+            }
+        }
+
+        .toast.fade-out {
+            animation: toastFadeOut 0.3s ease-out forwards;
+        }
+
         #places-search {
             flex: 1;
             padding: 0.75rem;
@@ -564,7 +618,7 @@
         }
 
         /* Destinations Panel */
-        .destinations-panel {
+        .destinations-panel, .friends-panel {
             position: fixed;
             right: -600px;
             top: 0;
@@ -579,7 +633,7 @@
             overflow-y: auto;
         }
 
-        .destinations-panel.open {
+        .destinations-panel.open, .friends-panel.open {
             right: 0;
         }
 
@@ -590,7 +644,7 @@
             }
         }
 
-        .destinations-panel-header {
+        .destinations-panel-header, .friends-panel-header {
             padding: 1.5rem;
             border-bottom: 1px solid #e0e0e0;
             display: flex;
@@ -600,12 +654,12 @@
             color: white;
         }
 
-        .destinations-panel-header h2 {
+        .destinations-panel-header h2, .friends-panel-header h2 {
             font-size: 1.25rem;
             font-weight: 600;
         }
 
-        .destinations-panel-content {
+        .destinations-panel-content, .friends-panel-content {
             padding: 1.5rem;
             flex: 1;
         }
@@ -653,6 +707,24 @@
             font-weight: 600;
             text-transform: uppercase;
             margin-left: 0.5rem;
+        }
+
+        .friend-label {
+            display: inline-block;
+            padding: 0.2rem 0.6rem;
+            border-radius: 999px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            margin-right: 0.35rem;
+            color: #fff;
+        }
+
+        .friend-label.joining {
+            background: #1f9d55;
+        }
+
+        .friend-label.interested {
+            background: #f59e0b;
         }
 
         .status-active {
@@ -876,6 +948,61 @@
             background: #f0f0f0;
             transform: translateY(-2px);
             box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        /* Friend Pills */
+        .friend-pill {
+            padding: 0.75rem 1rem;
+            background: #f9f9f9;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            margin-bottom: 0.75rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .friend-pill:hover {
+            background: #f0f0f0;
+            transform: translateY(-2px);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        .friend-pill-avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: #667eea;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: 600;
+            flex-shrink: 0;
+        }
+
+        .friend-pill-avatar img {
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            object-fit: cover;
+        }
+
+        .friend-pill-info {
+            flex: 1;
+        }
+
+        .friend-pill-name {
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 0.25rem;
+        }
+
+        .friend-pill-email {
+            font-size: 0.85rem;
+            color: #666;
         }
 
         /* Event View Side Panel */
@@ -1156,6 +1283,7 @@
             <div id="auth-section" style="display: none;">
                 <span id="user-name" style="margin-right: 1rem; font-size: 0.9rem;"></span>
                 <button class="header-btn" onclick="openDestinationsPanel()">My Destinations</button>
+                <button class="header-btn" onclick="openFriendsPanel()">My Friends</button>
                 <button class="header-btn" onclick="logout()">Logout</button>
             </div>
             <div id="login-section">
@@ -1186,8 +1314,8 @@
                     autocomplete="off"
                 />
                 </div>
-                <button class="location-btn" onclick="centerOnUserLocation()" title="Center on my location">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <button class="location-btn" id="locate-me-btn" onclick="handleLocateButtonClick()" title="Center on my location">
+                    <svg id="locate-me-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <circle cx="12" cy="12" r="10"/>
                         <circle cx="12" cy="12" r="6"/>
                         <circle cx="12" cy="12" r="2"/>
@@ -1196,6 +1324,9 @@
             </div>
             <div id="places-list" class="places-list"></div>
         </div>
+        
+        <!-- Toast Container -->
+        <div id="toast-container" class="toast-container"></div>
         
         <!-- Side Panel -->
         <div id="side-panel" class="side-panel">
@@ -1294,6 +1425,19 @@
             </div>
         </div>
         
+        <!-- Friends Panel -->
+        <div id="friends-panel" class="friends-panel">
+            <div class="friends-panel-header">
+                <h2>My Friends</h2>
+                <button class="close-btn" onclick="closeFriendsPanel()">&times;</button>
+            </div>
+            <div class="friends-panel-content">
+                <div id="friends-list-container">
+                    <div class="loading">Loading friends...</div>
+                </div>
+            </div>
+        </div>
+
         <!-- User Profile View Side Panel -->
         <div id="user-profile-panel" class="side-panel">
             <div class="side-panel-header">
@@ -1343,9 +1487,18 @@
         let infowindow;
         let markers = [];
         let recommendationMarkers = [];
+        let friendMarkers = [];
         let userLocation = null;
         let currentUser = null;
         let currentWeather = null;
+
+        // Refresh Places Feature Configuration
+        const MAX_RECOMMENDATIONS = 3; // Configurable number of places to show at a time
+
+        // Refresh Places Feature State
+        let locateButtonState = 'initial'; // 'initial', 'refresh-ready', 'max-refreshes'
+        let refreshCount = 0; // Max 2, persists when map moves
+        let shownPlaceIds = new Set(); // Track ALL previously shown place IDs (initial + all refreshes)
 
         // Authentication functions
         async function checkAuthStatus() {
@@ -1357,10 +1510,16 @@
                     document.getElementById('auth-section').style.display = 'flex';
                     document.getElementById('login-section').style.display = 'none';
                     document.getElementById('user-name').textContent = data.name || data.email;
+                    // Load friend events when user is authenticated
+                    if (map) {
+                        loadFriendEvents();
+                    }
                 } else {
                     currentUser = null;
                     document.getElementById('auth-section').style.display = 'none';
                     document.getElementById('login-section').style.display = 'block';
+                    // Clear friend markers when logged out
+                    clearFriendMarkers();
                 }
             } catch (error) {
                 console.error('Error checking auth status:', error);
@@ -1490,6 +1649,63 @@
                 e.preventDefault();
             });
 
+            // Debounce helper function
+            function debounce(func, wait) {
+                let timeout;
+                return function executedFunction(...args) {
+                    const later = () => {
+                        clearTimeout(timeout);
+                        func(...args);
+                    };
+                    clearTimeout(timeout);
+                    timeout = setTimeout(later, wait);
+                };
+            }
+
+            // Reset locate button state on significant map interaction (click and hold for 2 seconds)
+            let mapHoldTimeout = null;
+            let isMapHeld = false;
+
+            function resetLocateButtonState() {
+                if (locateButtonState === 'refresh-ready' || locateButtonState === 'max-refreshes') {
+                    locateButtonState = 'initial';
+                    updateLocateButtonIcon('initial');
+                    // Keep refreshCount and shownPlaceIds (do NOT reset)
+                }
+            }
+
+            // Handle map click and hold (1 second) to reset button state
+            map.addListener('mousedown', (e) => {
+                // Only reset if button is in refresh-ready or max-refreshes state
+                if (locateButtonState === 'refresh-ready' || locateButtonState === 'max-refreshes') {
+                    isMapHeld = true;
+                    mapHoldTimeout = setTimeout(() => {
+                        if (isMapHeld) {
+                            resetLocateButtonState();
+                            isMapHeld = false;
+                        }
+                    }, 1000); // 1 second hold
+                }
+            });
+
+            // Clear timeout if user releases mouse before 1 second
+            map.addListener('mouseup', (e) => {
+                if (mapHoldTimeout) {
+                    clearTimeout(mapHoldTimeout);
+                    mapHoldTimeout = null;
+                }
+                isMapHeld = false;
+            });
+
+            // Also clear on mouse leave (user drags off map)
+            map.addListener('mouseout', (e) => {
+                if (mapHoldTimeout) {
+                    clearTimeout(mapHoldTimeout);
+                    mapHoldTimeout = null;
+                }
+                isMapHeld = false;
+            });
+
             // Add a marker for user's location (not clickable)
             const userMarker = new google.maps.Marker({
                 position: location,
@@ -1514,8 +1730,20 @@
             // Update date and weather
             updateDateAndWeather(location);
 
-            // Load time-based recommendations (3 places)
-            loadTimeBasedRecommendations(location);
+            // Load time-based recommendations (MAX_RECOMMENDATIONS places)
+            loadTimeBasedRecommendations(location).then(placeIds => {
+                // Track initial recommendations
+                if (placeIds && placeIds.length > 0) {
+                    placeIds.forEach(placeId => {
+                        shownPlaceIds.add(placeId);
+                    });
+                }
+            });
+            
+            // Load friend events if user is authenticated
+            if (currentUser) {
+                loadFriendEvents();
+            }
 
             // Setup search input with Autocomplete (but hide Google's dropdown)
             const input = document.getElementById('places-search');
@@ -1930,30 +2158,118 @@
             }
         }
 
-        // Center map on user location
-        function centerOnUserLocation() {
-            if (userLocation) {
-                map.setCenter(userLocation);
-                map.setZoom(15);
-            } else if (navigator.geolocation) {
-                navigator.geolocation.getCurrentPosition(
-                    (position) => {
-                        userLocation = {
-                            lat: position.coords.latitude,
-                            lng: position.coords.longitude
-                        };
-                        // Cache user location in localStorage
-                        localStorage.setItem('userLocation', JSON.stringify(userLocation));
-                        map.setCenter(userLocation);
-                        map.setZoom(15);
-                    },
-                    (error) => {
-                        alert('Unable to get your location. Please enable location services.');
-                    }
-                );
-            } else {
-                alert('Geolocation is not supported by your browser.');
+        // Update locate button icon based on state
+        function updateLocateButtonIcon(state) {
+            const iconEl = document.getElementById('locate-me-icon');
+            const buttonEl = document.getElementById('locate-me-btn');
+            
+            if (!iconEl) return;
+            
+            if (state === 'initial') {
+                // Three concentric circles
+                iconEl.innerHTML = `
+                    <circle cx="12" cy="12" r="10"/>
+                    <circle cx="12" cy="12" r="6"/>
+                    <circle cx="12" cy="12" r="2"/>
+                `;
+                buttonEl.disabled = false;
+                buttonEl.style.opacity = '1';
+            } else if (state === 'refresh-ready') {
+                // Same circles but innermost replaced with "+"
+                iconEl.innerHTML = `
+                    <circle cx="12" cy="12" r="10"/>
+                    <circle cx="12" cy="12" r="6"/>
+                    <line x1="12" y1="9" x2="12" y2="15" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                    <line x1="9" y1="12" x2="15" y2="12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                `;
+                buttonEl.disabled = false;
+                buttonEl.style.opacity = '1';
+            } else if (state === 'max-refreshes') {
+                // Same as refresh-ready but grayed out
+                iconEl.innerHTML = `
+                    <circle cx="12" cy="12" r="10"/>
+                    <circle cx="12" cy="12" r="6"/>
+                    <line x1="12" y1="9" x2="12" y2="15" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                    <line x1="9" y1="12" x2="15" y2="12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                `;
+                buttonEl.disabled = true;
+                buttonEl.style.opacity = '0.5';
             }
+        }
+
+        // Show toast notification
+        function showToast(message, duration = 3000) {
+            const container = document.getElementById('toast-container');
+            if (!container) return;
+            
+            // Remove existing toasts
+            container.innerHTML = '';
+            
+            // Create toast element
+            const toast = document.createElement('div');
+            toast.className = 'toast';
+            toast.textContent = message;
+            
+            container.appendChild(toast);
+            
+            // Auto-remove after duration
+            setTimeout(() => {
+                toast.classList.add('fade-out');
+                setTimeout(() => {
+                    if (toast.parentNode) {
+                        toast.parentNode.removeChild(toast);
+                    }
+                }, 300); // Match fade-out animation duration
+            }, duration);
+        }
+
+        // Handle locate button click
+        function handleLocateButtonClick() {
+            if (locateButtonState === 'initial') {
+                // First click: center map
+                if (userLocation) {
+                    map.setCenter(userLocation);
+                    map.setZoom(15);
+                } else if (navigator.geolocation) {
+                    navigator.geolocation.getCurrentPosition(
+                        (position) => {
+                            userLocation = {
+                                lat: position.coords.latitude,
+                                lng: position.coords.longitude
+                            };
+                            // Cache user location in localStorage
+                            localStorage.setItem('userLocation', JSON.stringify(userLocation));
+                            map.setCenter(userLocation);
+                            map.setZoom(15);
+                        },
+                        (error) => {
+                            alert('Unable to get your location. Please enable location services.');
+                        }
+                    );
+                } else {
+                    alert('Geolocation is not supported by your browser.');
+                    return;
+                }
+                
+                // Change state to refresh-ready
+                locateButtonState = 'refresh-ready';
+                updateLocateButtonIcon('refresh-ready');
+            } else if (locateButtonState === 'refresh-ready') {
+                // Second/third click: refresh recommendations
+                if (refreshCount < 2) {
+                    refreshRecommendations();
+                } else {
+                    showToast('No more places left');
+                }
+            } else if (locateButtonState === 'max-refreshes') {
+                // Max refreshes reached
+                showToast('No more places left');
+            }
+        }
+
+        // Center map on user location (kept for backward compatibility if needed)
+        function centerOnUserLocation() {
+            handleLocateButtonClick();
         }
 
         let selectedPlace = null;
@@ -2024,8 +2340,8 @@
         }
         
         // Time-based recommendations
-        async function loadTimeBasedRecommendations(location) {
-            if (!location || !service) return;
+        async function loadTimeBasedRecommendations(location, excludePlaceIds = new Set()) {
+            if (!location || !service) return [];
             
             const now = new Date();
             const hour = now.getHours();
@@ -2038,32 +2354,32 @@
             if (hour >= 5 && hour < 11) {
                 // Morning: breakfast/coffee
                 placeTypes = ['cafe', 'bakery', 'restaurant'];
-                headline = '☕ Good morning! Here are 3 breakfast and coffee spots within walking distance, perfect for starting your day.';
+                headline = `☕ Good morning! Here are ${MAX_RECOMMENDATIONS} breakfast and coffee spots within walking distance, perfect for starting your day.`;
             } else if (hour >= 11 && hour < 14) {
                 // Lunch time
                 placeTypes = ['restaurant', 'food', 'meal_takeaway'];
-                headline = '🍽️ It\'s lunchtime! Here are 3 nearby restaurants you can walk to for a great meal.';
+                headline = `🍽️ It's lunchtime! Here are ${MAX_RECOMMENDATIONS} nearby restaurants you can walk to for a great meal.`;
             } else if (hour >= 14 && hour < 17) {
                 // After lunch
                 if (isSunny) {
                     placeTypes = ['park'];
-                    headline = '🌳 Beautiful weather! Here are 3 parks within walking distance to enjoy the sunshine.';
+                    headline = `🌳 Beautiful weather! Here are ${MAX_RECOMMENDATIONS} parks within walking distance to enjoy the sunshine.`;
                 } else {
                     placeTypes = ['book_store', 'library'];
-                    headline = '📚 Perfect reading weather! Here are 3 bookstores and libraries you can walk to.';
+                    headline = `📚 Perfect reading weather! Here are ${MAX_RECOMMENDATIONS} bookstores and libraries you can walk to.`;
                 }
             } else if (hour >= 17 && hour < 19) {
                 // Dinner time (5-7pm)
                 placeTypes = ['restaurant', 'food'];
-                headline = '🍴 Dinner time! Here are 3 restaurants within walking distance for a great evening meal.';
+                headline = `🍴 Dinner time! Here are ${MAX_RECOMMENDATIONS} restaurants within walking distance for a great evening meal.`;
             } else if (hour >= 19 && hour < 24) {
                 // Late night (7pm-12am): bars
                 placeTypes = ['bar', 'night_club'];
-                headline = '🍺 Evening vibes! Here are 3 bars and nightlife spots you can walk to nearby.';
+                headline = `🍺 Evening vibes! Here are ${MAX_RECOMMENDATIONS} bars and nightlife spots you can walk to nearby.`;
             } else {
                 // Late night/early morning (12am-5am): bars or cafes
                 placeTypes = ['bar', 'cafe'];
-                headline = '🌙 Late night? Here are 3 places still open that you can walk to right now.';
+                headline = `🌙 Late night? Here are ${MAX_RECOMMENDATIONS} places still open that you can walk to right now.`;
             }
             
             // Show headline
@@ -2104,18 +2420,27 @@
                 });
             }
             
-            // Remove duplicates and limit to 3
+            // Remove duplicates and exclude previously shown places, limit to MAX_RECOMMENDATIONS
             const uniquePlaces = [];
             const seenPlaceIds = new Set();
             
             for (const place of allPlaces) {
-                if (!seenPlaceIds.has(place.place_id) && uniquePlaces.length < 3) {
-                    seenPlaceIds.add(place.place_id);
-                    uniquePlaces.push(place);
+                // Skip if already seen in this search or in excludePlaceIds
+                if (seenPlaceIds.has(place.place_id) || excludePlaceIds.has(place.place_id)) {
+                    continue;
                 }
+                
+                // Limit to MAX_RECOMMENDATIONS places
+                if (uniquePlaces.length >= MAX_RECOMMENDATIONS) {
+                    break;
+                }
+                
+                seenPlaceIds.add(place.place_id);
+                uniquePlaces.push(place);
             }
             
             // Add recommendation markers
+            const shownPlaceIds = [];
             uniquePlaces.forEach(place => {
                 addRecommendationMarker(
                     place.geometry.location,
@@ -2124,7 +2449,59 @@
                     place.rating,
                     place.place_id
                 );
+                shownPlaceIds.push(place.place_id);
             });
+            
+            // Return array of place IDs that were shown
+            return shownPlaceIds;
+        }
+
+        // Refresh recommendations with new places
+        async function refreshRecommendations() {
+            if (!userLocation) {
+                // Try to get location if not available
+                if (navigator.geolocation) {
+                    navigator.geolocation.getCurrentPosition(
+                        (position) => {
+                            userLocation = {
+                                lat: position.coords.latitude,
+                                lng: position.coords.longitude
+                            };
+                            localStorage.setItem('userLocation', JSON.stringify(userLocation));
+                            performRefresh();
+                        },
+                        (error) => {
+                            alert('Unable to get your location. Please enable location services.');
+                        }
+                    );
+                } else {
+                    alert('Location not available.');
+                }
+                return;
+            }
+            
+            performRefresh();
+        }
+
+        async function performRefresh() {
+            // Load new recommendations excluding all previously shown places
+            const newPlaceIds = await loadTimeBasedRecommendations(userLocation, shownPlaceIds);
+            
+            // Add new place IDs to the exclusion set
+            if (newPlaceIds && newPlaceIds.length > 0) {
+                newPlaceIds.forEach(placeId => {
+                    shownPlaceIds.add(placeId);
+                });
+            }
+            
+            // Increment refresh count
+            refreshCount++;
+            
+            // Update button state if max refreshes reached
+            if (refreshCount >= 2) {
+                locateButtonState = 'max-refreshes';
+                updateLocateButtonIcon('max-refreshes');
+            }
         }
         
         function addRecommendationMarker(location, name, address, rating, placeId) {
@@ -2269,9 +2646,9 @@
                 selectedPlace.place_type = 'Place';
             }
 
-            // Set default date to today and set minimum to today
+            // Set default date to today (localized) and set minimum to today
             const today = new Date();
-            const dateStr = today.toISOString().split('T')[0];
+            const dateStr = formatDateForInput(today);
             const dateInput = document.getElementById('destination-date');
             dateInput.value = dateStr;
             dateInput.min = dateStr; // Prevent selecting past dates
@@ -2357,7 +2734,7 @@
                             break;
                         }
                     }
-                    dateInput.value = nextOpenDate.toISOString().split('T')[0];
+                    dateInput.value = formatDateForInput(nextOpenDate);
                     dateInput.reportValidity();
                 }
             });
@@ -2380,24 +2757,51 @@
         }
 
         // Filter time input based on opening hours
+        function formatDateForInput(date) {
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const day = String(date.getDate()).padStart(2, '0');
+            return `${year}-${month}-${day}`;
+        }
+
+        function timeStringToMinutes(timeString) {
+            const [hourStr, minuteStr] = timeString.split(':');
+            return parseInt(hourStr, 10) * 60 + parseInt(minuteStr, 10);
+        }
+
+        function formatTimeForDisplay(time24) {
+            if (!time24) return '';
+            let [hour, minute] = time24.split(':').map(Number);
+            const period = hour >= 12 ? 'PM' : 'AM';
+            hour = hour % 12;
+            if (hour === 0) hour = 12;
+            return `${hour}:${String(minute).padStart(2, '0')} ${period}`;
+        }
+
         function filterTimeInput(timeInput, hoursText) {
-            // Parse hours (e.g., "9:00 AM – 5:00 PM" or "24 hours")
-            const timeRange = parseHoursText(hoursText);
-            if (!timeRange) {
+            // Parse hours (e.g., "9:00 AM – 5:00 PM" or "11:30 AM – 2:30 PM, 5:00 – 10:00 PM")
+            const timeRangeData = parseHoursText(hoursText);
+            if (!timeRangeData) {
                 timeInput.disabled = false;
                 return; // Can't parse, allow all times
             }
 
             timeInput.disabled = false;
-            timeInput.min = timeRange.start;
-            
-            // If end time is 00:00 (midnight), it means the business is open until the end of the day
-            // HTML5 time input max should be 23:59, not 00:00
-            if (timeRange.end === '00:00') {
+            if (timeRangeData.hasOvernight) {
+                timeInput.min = '00:00';
                 timeInput.max = '23:59';
             } else {
-                timeInput.max = timeRange.end;
+                timeInput.min = timeRangeData.start;
+                if (timeRangeData.end === '00:00') {
+                    timeInput.max = '23:59';
+                } else {
+                    timeInput.max = timeRangeData.end;
+                }
             }
+            
+            // Store the ranges for validation (since HTML5 input can only have one min/max)
+            timeInput.dataset.timeRanges = JSON.stringify(timeRangeData.ranges);
+            timeInput.dataset.displayRanges = JSON.stringify(timeRangeData.displayRanges || []);
         }
 
         // Convert time input to 24-hour format
@@ -2434,15 +2838,10 @@
             return timeString;
         }
 
-        // Parse hours text to get time range
-        function parseHoursText(hoursText) {
-            // Handle 24 hours
-            if (hoursText.toLowerCase().includes('24 hours')) {
-                return { start: '00:00', end: '23:59' };
-            }
-
-            // Parse format like "9:00 AM – 5:00 PM"
-            const match = hoursText.match(/(\d{1,2}):(\d{2})\s*(AM|PM)\s*[–-]\s*(\d{1,2}):(\d{2})\s*(AM|PM)/i);
+        // Parse a single time range from text like "9:00 AM – 5:00 PM" or "5:00 – 10:00 PM"
+        function parseSingleTimeRange(rangeText) {
+            // Try format with AM/PM on both sides: "9:00 AM – 5:00 PM"
+            let match = rangeText.match(/(\d{1,2}):(\d{2})\s*(AM|PM)\s*[–-]\s*(\d{1,2}):(\d{2})\s*(AM|PM)/i);
             if (match) {
                 const startHour = parseInt(match[1]);
                 const startMin = parseInt(match[2]);
@@ -2465,7 +2864,121 @@
                 };
             }
 
+            // Try format with AM/PM only on end: "5:00 – 10:00 PM" or "11:30 – 2:30 PM"
+            // Or format like "11:30 AM – 2:30 PM, 5:00 – 10:00 PM" where second range needs context
+            match = rangeText.match(/(\d{1,2}):(\d{2})\s*[–-]\s*(\d{1,2}):(\d{2})\s*(AM|PM)/i);
+            if (match) {
+                let startHour = parseInt(match[1]);
+                const startMin = parseInt(match[2]);
+                const endHour = parseInt(match[3]);
+                const endMin = parseInt(match[4]);
+                const endPeriod = match[5].toUpperCase();
+
+                // Determine start period based on context
+                // If start hour > end hour and end is PM, start is likely AM (e.g., 11:30 - 2:30 PM)
+                // If start hour < end hour and end is PM, start is also PM (e.g., 5:00 - 10:00 PM)
+                // If end is AM, start is also AM
+                let startPeriod = endPeriod; // Default to same as end
+                if (endPeriod === 'PM') {
+                    if (startHour > endHour) {
+                        // Start hour is greater (like 11 > 2), so start must be AM
+                        startPeriod = 'AM';
+                    } else {
+                        // Start hour is less or equal, both are PM
+                        startPeriod = 'PM';
+                    }
+                } else {
+                    // End is AM, start is also AM
+                    startPeriod = 'AM';
+                }
+
+                let startHour24 = startHour;
+                if (startPeriod === 'PM' && startHour !== 12) startHour24 += 12;
+                if (startPeriod === 'AM' && startHour === 12) startHour24 = 0;
+
+                let endHour24 = endHour;
+                if (endPeriod === 'PM' && endHour !== 12) endHour24 += 12;
+                if (endPeriod === 'AM' && endHour === 12) endHour24 = 0;
+
+                return {
+                    start: `${String(startHour24).padStart(2, '0')}:${String(startMin).padStart(2, '0')}`,
+                    end: `${String(endHour24).padStart(2, '0')}:${String(endMin).padStart(2, '0')}`
+                };
+            }
+
             return null;
+        }
+
+        // Parse hours text to get time range(s) - handles multiple ranges separated by commas
+        function parseHoursText(hoursText) {
+            if (!hoursText) return null;
+            
+            const normalizedRanges = [];
+            const displayRanges = [];
+            let earliestStart = null;
+            let earliestStartMinutes = null;
+            let latestEnd = null;
+            let latestEndMinutes = null;
+            let hasOvernight = false;
+            
+            const lowerText = hoursText.toLowerCase();
+            if (lowerText.includes('24 hours')) {
+                return {
+                    ranges: [{ start: '00:00', end: '23:59' }],
+                    start: '00:00',
+                    end: '23:59',
+                    displayRanges: ['12:00 AM - 11:59 PM'],
+                    hasOvernight: false
+                };
+            }
+            
+            const rangeParts = hoursText.split(',').map(s => s.trim()).filter(Boolean);
+            for (const rangePart of rangeParts) {
+                const parsed = parseSingleTimeRange(rangePart);
+                if (!parsed) {
+                    continue;
+                }
+                
+                displayRanges.push(`${formatTimeForDisplay(parsed.start)} - ${formatTimeForDisplay(parsed.end)}`);
+                
+                const startMinutes = timeStringToMinutes(parsed.start);
+                const endMinutes = timeStringToMinutes(parsed.end);
+                
+                if (earliestStartMinutes === null || startMinutes < earliestStartMinutes) {
+                    earliestStartMinutes = startMinutes;
+                    earliestStart = parsed.start;
+                }
+                
+                if (endMinutes <= startMinutes) {
+                    hasOvernight = true;
+                    normalizedRanges.push({ start: parsed.start, end: '23:59' });
+                    normalizedRanges.push({ start: '00:00', end: parsed.end });
+                } else {
+                    normalizedRanges.push({ start: parsed.start, end: parsed.end });
+                    if (latestEndMinutes === null || endMinutes > latestEndMinutes) {
+                        latestEndMinutes = endMinutes;
+                        latestEnd = parsed.end;
+                    }
+                }
+            }
+            
+            if (normalizedRanges.length === 0) {
+                return null;
+            }
+            
+            const overallStart = earliestStart || '00:00';
+            let overallEnd = '23:59';
+            if (!hasOvernight && latestEnd) {
+                overallEnd = latestEnd === '00:00' ? '23:59' : latestEnd;
+            }
+            
+            return {
+                ranges: normalizedRanges,
+                start: overallStart,
+                end: overallEnd,
+                displayRanges,
+                hasOvernight
+            };
         }
 
         function toggleTimeSection() {
@@ -2511,6 +3024,162 @@
 
         function closeDestinationsPanel() {
             document.getElementById('destinations-panel').classList.remove('open');
+        }
+
+        // Friends Panel Functions
+        function openFriendsPanel() {
+            if (!requireAuth(() => true)) return;
+            document.getElementById('friends-panel').classList.add('open');
+            loadFriendsList();
+        }
+
+        function closeFriendsPanel() {
+            document.getElementById('friends-panel').classList.remove('open');
+        }
+
+        async function loadFriendsList() {
+            try {
+                const response = await fetch('/api/friends');
+                if (!response.ok) {
+                    throw new Error('Failed to load friends');
+                }
+                const friends = await response.json();
+                const container = document.getElementById('friends-list-container');
+                
+                if (friends.length === 0) {
+                    container.innerHTML = '<div style="text-align: center; color: #666; padding: 2rem;">You are not following anyone yet.</div>';
+                    return;
+                }
+                
+                container.innerHTML = friends.map(friend => `
+                    <div class="friend-pill" onclick="showUserProfile(${friend.id})">
+                        <div class="friend-pill-avatar">
+                            ${friend.picture_url ? `<img src="${escapeHtml(friend.picture_url)}" alt="${escapeHtml(friend.name || friend.email)}">` : (friend.name || friend.email || 'U').charAt(0).toUpperCase()}
+                        </div>
+                        <div class="friend-pill-info">
+                            <div class="friend-pill-name">${escapeHtml(friend.name || friend.email || 'Unknown')}</div>
+                            <div class="friend-pill-email">${escapeHtml(friend.email)}</div>
+                        </div>
+                    </div>
+                `).join('');
+            } catch (error) {
+                console.error('Error loading friends:', error);
+                document.getElementById('friends-list-container').innerHTML = 
+                    '<div style="text-align: center; color: #d32f2f; padding: 2rem;">Error loading friends. Please try again.</div>';
+            }
+        }
+
+        // Friend Events Functions
+        function clearFriendMarkers() {
+            friendMarkers.forEach(marker => marker.setMap(null));
+            friendMarkers = [];
+        }
+
+        async function loadFriendEvents() {
+            if (!currentUser) return;
+            
+            try {
+                const response = await fetch('/api/friends/events');
+                if (!response.ok) {
+                    throw new Error('Failed to load friend events');
+                }
+                const events = await response.json();
+                
+                clearFriendMarkers();
+                
+                events.forEach(event => {
+                    addFriendEventMarker(event);
+                });
+            } catch (error) {
+                console.error('Error loading friend events:', error);
+            }
+        }
+
+        function addFriendEventMarker(event) {
+            // Create custom icon for friend event markers (purple/orange color)
+            const icon = {
+                path: google.maps.SymbolPath.CIRCLE,
+                scale: 10,
+                fillColor: '#ff6b35', // Orange color for friend events
+                fillOpacity: 1,
+                strokeColor: '#ffffff',
+                strokeWeight: 2
+            };
+            
+            const position = { lat: event.latitude, lng: event.longitude };
+            const marker = new google.maps.Marker({
+                position: position,
+                map: map,
+                title: event.place_name,
+                icon: icon,
+                clickable: true,
+                optimized: false
+            });
+            
+            // Determine friend info
+            const friendInfo = event.friend_participant || event.organizer;
+            const friendName = friendInfo ? (friendInfo.name || friendInfo.email || 'Friend') : 'Friend';
+            const participationType = event.friend_participation_type || (event.is_organizer === false ? 'going' : 'going');
+            
+            // Format date and time
+            const eventDate = new Date(event.scheduled_date);
+            const dateStr = eventDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+            const timeStr = event.scheduled_time ? new Date(`2000-01-01T${event.scheduled_time}`).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : 'All day';
+            
+            const content = `
+                <div style="padding: 0.5rem; min-width: 200px; background: linear-gradient(135deg, #ff6b35 0%, #f7931e 100%); border-radius: 6px;">
+                    <div style="background: white; padding: 0.75rem; border-radius: 4px;">
+                        <div style="background: #fff3e0; padding: 0.5rem; border-radius: 4px; margin-bottom: 0.5rem; font-size: 0.85rem; color: #e65100; font-weight: 600;">
+                            👥 Friend Event
+                        </div>
+                        <h3 style="margin-bottom: 0.5rem; font-size: 1.1rem; margin-top: 0; padding-top: 0; color: #333;">${escapeHtml(event.place_name)}</h3>
+                        <p style="margin-bottom: 0.5rem; color: #666; font-size: 0.9rem;">${escapeHtml(event.address || '')}</p>
+                        <p style="margin-bottom: 0.5rem; color: #666; font-size: 0.85rem;">${friendName} is ${participationType === 'joined' ? 'going' : 'interested'}</p>
+                        <p style="margin-bottom: 0.75rem; color: #667eea; font-size: 0.85rem; font-weight: 600;">📅 ${dateStr} at ${timeStr}</p>
+                        <button class="go-here-btn" onclick="showFriendEvent('${event.id}')" style="background: #ff6b35; color: white; border: none; padding: 0.5rem 1rem; border-radius: 4px; cursor: pointer; font-weight: 600; width: 100%;">View Event</button>
+                    </div>
+                </div>
+            `;
+            
+            marker.addListener('click', (e) => {
+                infowindow.close();
+                if (e && e.stopPropagation) {
+                    e.stopPropagation();
+                }
+                setTimeout(() => {
+                    infowindow.setContent(content);
+                    ensureInfoWindowMargin(marker);
+                    infowindow.open(map, marker);
+                    setTimeout(() => {
+                        adjustInfoWindowPosition(marker);
+                    }, 100);
+                }, 50);
+            });
+            
+            friendMarkers.push(marker);
+        }
+
+        async function showFriendEvent(eventId) {
+            // Close any open panels
+            closeSidePanel();
+            closeDestinationsPanel();
+            closeFriendsPanel();
+            
+            // Scroll map to event location
+            const response = await fetch(`/api/destinations/${eventId}`);
+            if (!response.ok) {
+                alert('Event not found');
+                return;
+            }
+            const event = await response.json();
+            
+            // Center map on event
+            const position = { lat: event.latitude, lng: event.longitude };
+            map.setCenter(position);
+            map.setZoom(15);
+            
+            // Open Event View
+            showEventViewFromId(eventId);
         }
 
         function switchDestinationsView(view) {
@@ -2879,8 +3548,20 @@
                 ? `https://www.google.com/maps/dir/?api=1&origin=${userLocationForDirections}&destination=${encodeURIComponent(event.address || '')}`
                 : `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(event.address || '')}`;
             
+            // Check if this is a friend event (from a followed user)
+            // A friend event is one where:
+            // 1. The event has is_friend_event flag (set by backend)
+            // 2. OR the event has a friend_participant (a followed user is participating)
+            const isFriendEvent = event.is_friend_event || event.friend_participant;
+            const friendEventIndicator = isFriendEvent ? `
+                <div style="background: #fff3e0; padding: 0.5rem; border-radius: 4px; margin-bottom: 0.75rem; font-size: 0.85rem; color: #e65100; font-weight: 600; text-align: center;">
+                    👥 Friend Event
+                </div>
+            ` : '';
+            
             // Set header with rating floating right and type below
             header.innerHTML = `
+                ${friendEventIndicator}
                 <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 0.5rem;">
                     <span>${escapeHtml(event.place_name)}</span>
                     ${event.rating ? `<span class="rating" style="float: right; margin-left: 0.5rem;">⭐ ${event.rating}</span>` : ''}
@@ -3072,6 +3753,61 @@
                     day: 'numeric' 
                 });
                 
+                const viewerId = currentUser?.user_id || null;
+                
+                // Build follow button (green, below user data)
+                // Unfollow button (red) will be at the bottom
+                let followButton = '';
+                let unfollowButton = '';
+                if (viewerId && user.id !== viewerId) {
+                    if (user.is_following) {
+                        unfollowButton = `
+                            <div style="margin-top: 2rem; padding-top: 2rem; border-top: 1px solid #e0e0e0;">
+                                <button class="btn" onclick="unfollowUser(${user.id})" style="background: #d32f2f; color: white; width: 100%;">Unfollow</button>
+                            </div>
+                        `;
+                    } else {
+                        followButton = `
+                            <button class="btn" onclick="followUser(${user.id})" style="background: #28a745; color: white; margin-top: 1rem; width: 100%;">Follow</button>
+                        `;
+                    }
+                }
+                
+                // Build upcoming events list (next 7 days)
+                const upcomingEvents = user.upcoming_events || [];
+                let upcomingEventsHtml = '';
+                if (upcomingEvents.length > 0) {
+                    upcomingEventsHtml = `
+                        <div style="margin-top: 2rem;">
+                            <h3 style="font-size: 1.1rem; font-weight: 600; color: #333; margin-bottom: 1rem;">Upcoming events</h3>
+                            <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+                                ${upcomingEvents.map(event => {
+                                    const eventDate = new Date(`${event.scheduled_date}T${event.scheduled_time || '00:00:00'}`);
+                                    const dateLabel = eventDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+                                    const timeLabel = event.scheduled_time ? new Date(`2000-01-01T${event.scheduled_time}`).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : 'All day';
+                                    const roleLabel = event.is_organizer ? 'Organizer' : (event.participation_type === 'joined' ? 'Joined' : 'Interested');
+                                    return `
+                                        <div class="friend-pill" onclick="showEventViewFromId('${event.id}')">
+                                            <div class="friend-pill-info">
+                                                <div class="friend-pill-name">${escapeHtml(event.place_name)}</div>
+                                                <div class="friend-pill-email">${dateLabel} • ${timeLabel} • ${escapeHtml(event.place_type || 'Place')}</div>
+                                            </div>
+                                            <div style="font-size: 0.75rem; color: #667eea; font-weight: 600;">${roleLabel}</div>
+                                        </div>
+                                    `;
+                                }).join('')}
+                            </div>
+                        </div>
+                    `;
+                } else {
+                    upcomingEventsHtml = `
+                        <div style="margin-top: 2rem;">
+                            <h3 style="font-size: 1.1rem; font-weight: 600; color: #333; margin-bottom: 1rem;">Upcoming events</h3>
+                            <div style="text-align: center; color: #666; padding: 1rem;">No events scheduled in the next week.</div>
+                        </div>
+                    `;
+                }
+                
                 profileContent.innerHTML = `
                     <div style="text-align: center; margin-bottom: 2rem;">
                         <div style="width: 100px; height: 100px; border-radius: 50%; background: #667eea; display: inline-flex; align-items: center; justify-content: center; color: white; font-weight: 600; font-size: 2rem; margin-bottom: 1rem;">
@@ -3080,6 +3816,7 @@
                         <h3 style="font-size: 1.5rem; font-weight: 600; color: #333; margin-bottom: 0.5rem;">${escapeHtml(user.name || user.email || 'Unknown User')}</h3>
                         <p style="color: #666; font-size: 0.9rem;">${escapeHtml(user.email)}</p>
                     </div>
+                    ${followButton}
                     <div class="event-view-detail-item">
                         <div class="event-view-detail-label">Email</div>
                         <div>${escapeHtml(user.email)}</div>
@@ -3088,6 +3825,8 @@
                         <div class="event-view-detail-label">Member Since</div>
                         <div>${createdDateStr}</div>
                     </div>
+                    ${upcomingEventsHtml}
+                    ${unfollowButton}
                 `;
                 
                 profilePanel.classList.add('open');
@@ -3108,6 +3847,53 @@
                 // Destinations panel should still be open
             }
             previousViewBeforeProfile = null;
+        }
+
+        // Follow/Unfollow Functions
+        async function followUser(userId) {
+            try {
+                const response = await fetch(`/api/users/${userId}/follow`, {
+                    method: 'POST'
+                });
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.error || 'Failed to follow user');
+                }
+                // Reload user profile to update follow status
+                showUserProfile(userId);
+                // Reload friends list if panel is open
+                if (document.getElementById('friends-panel').classList.contains('open')) {
+                    loadFriendsList();
+                }
+                // Reload friend events
+                loadFriendEvents();
+            } catch (error) {
+                console.error('Error following user:', error);
+                alert('Error following user: ' + error.message);
+            }
+        }
+
+        async function unfollowUser(userId) {
+            try {
+                const response = await fetch(`/api/users/${userId}/follow`, {
+                    method: 'DELETE'
+                });
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.error || 'Failed to unfollow user');
+                }
+                // Reload user profile to update follow status
+                showUserProfile(userId);
+                // Reload friends list if panel is open
+                if (document.getElementById('friends-panel').classList.contains('open')) {
+                    loadFriendsList();
+                }
+                // Reload friend events
+                loadFriendEvents();
+            } catch (error) {
+                console.error('Error unfollowing user:', error);
+                alert('Error unfollowing user: ' + error.message);
+            }
         }
 
         function closeEventView() {
@@ -3181,30 +3967,39 @@
                     }
                     
                     if (hoursText) {
-                        const timeRange = parseHoursText(hoursText);
-                        if (timeRange) {
+                        const timeRangeData = parseHoursText(hoursText);
+                        if (timeRangeData && timeRangeData.ranges) {
                             const [selectedHour, selectedMin] = time.split(':').map(Number);
-                            const [startHour, startMin] = timeRange.start.split(':').map(Number);
-                            let [endHour, endMin] = timeRange.end.split(':').map(Number);
+                            const selectedTimeMinutes = selectedHour * 60 + selectedMin;
                             
-                            // If end time is 00:00 (midnight), it means the business is open until the end of the day
-                            // So we treat it as 23:59 for validation purposes
-                            if (endHour === 0 && endMin === 0) {
-                                endHour = 23;
-                                endMin = 59;
+                            // Check if the selected time falls within any of the time ranges
+                            let isWithinRange = false;
+                            for (const range of timeRangeData.ranges) {
+                                const [startHour, startMin] = range.start.split(':').map(Number);
+                                let [endHour, endMin] = range.end.split(':').map(Number);
+                                
+                                // If end time is 00:00 (midnight), it means the business is open until the end of the day
+                                // So we treat it as 23:59 for validation purposes
+                                if (endHour === 0 && endMin === 0) {
+                                    endHour = 23;
+                                    endMin = 59;
+                                }
+                                
+                                const startTimeMinutes = startHour * 60 + startMin;
+                                const endTimeMinutes = endHour * 60 + endMin;
+                                
+                                if (selectedTimeMinutes >= startTimeMinutes && selectedTimeMinutes <= endTimeMinutes) {
+                                    isWithinRange = true;
+                                    break;
+                                }
                             }
                             
-                            const selectedTimeMinutes = selectedHour * 60 + selectedMin;
-                            const startTimeMinutes = startHour * 60 + startMin;
-                            const endTimeMinutes = endHour * 60 + endMin;
-                            
-                            if (selectedTimeMinutes < startTimeMinutes || selectedTimeMinutes > endTimeMinutes) {
-                                // Format the display time range for the error message
-                                let displayEnd = timeRange.end;
-                                if (timeRange.end === '00:00') {
-                                    displayEnd = '11:59 PM';
-                                }
-                                alert(`The selected time is outside of business hours (${timeRange.start} - ${displayEnd}). Please select a time within the opening hours.`);
+                            if (!isWithinRange) {
+                                const displayRanges = (timeRangeData.displayRanges && timeRangeData.displayRanges.length > 0)
+                                    ? timeRangeData.displayRanges
+                                    : timeRangeData.ranges.map(range => `${formatTimeForDisplay(range.start)} - ${formatTimeForDisplay(range.end)}`);
+                                
+                                alert(`The selected time is outside of business hours (${displayRanges.join(', ')}). Please select a time within the opening hours.`);
                                 return;
                             }
                         }
@@ -3364,6 +4159,18 @@
                             const organizerName = dest.organizer_name || (dest.is_organizer ? 'You' : 'Unknown');
                             const participationBadge = dest.participation_type ? `<span style="font-size: 0.75rem; color: #667eea; margin-left: 0.5rem;">(${dest.participation_type === 'joined' ? 'Joined' : 'Interested'})</span>` : '';
 
+                            const friendsJoining = dest.friends_joining_count || 0;
+                            const friendsInterested = dest.friends_interested_count || 0;
+                            const friendLabels = [];
+                            if (friendsJoining > 0) {
+                                friendLabels.push('<span class="friend-label joining">Friends are joining</span>');
+                            }
+                            if (friendsInterested > 0) {
+                                const interestedLabel = friendsJoining > 0 ? 'More friends are interested' : 'Friends are interested';
+                                friendLabels.push(`<span class="friend-label interested">${interestedLabel}</span>`);
+                            }
+                            const friendLabelsHtml = friendLabels.length ? `<div style="margin-top: 0.5rem;">${friendLabels.join('')}</div>` : '';
+
                             return `
                                 <div class="destination-item" style="cursor: pointer;" onclick="showEventViewFromId('${dest.id}')">
                                     <div class="destination-item-header">
@@ -3375,6 +4182,7 @@
                                             <div style="font-size: 0.875rem; color: #666; margin-bottom: 0.25rem;">${escapeHtml(placeType)}</div>
                                             <div style="font-size: 0.875rem; color: #666; margin-bottom: 0.25rem;">${escapeHtml(organizerName)}</div>
                                             <div style="font-size: 0.875rem; color: #666;">${timeStr}</div>
+                                            ${friendLabelsHtml}
                                         </div>
                                     </div>
                                 </div>
@@ -3550,6 +4358,11 @@
         window.openDestinationsPanel = openDestinationsPanel;
         window.closeDestinationsPanel = closeDestinationsPanel;
         window.switchDestinationsView = switchDestinationsView;
+        window.openFriendsPanel = openFriendsPanel;
+        window.closeFriendsPanel = closeFriendsPanel;
+        window.followUser = followUser;
+        window.unfollowUser = unfollowUser;
+        window.showFriendEvent = showFriendEvent;
         window.navigateCalendar = navigateCalendar;
         window.centerOnUserLocation = centerOnUserLocation;
         window.toggleTimeSection = toggleTimeSection;
